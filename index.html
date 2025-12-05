@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Finans Asistanı</title>
-    <!-- PWA Manifest Bağlantısı -->
-    <link rel="manifest" href="manifest.json">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Inter Font -->
@@ -13,7 +11,7 @@
     
     <!-- Lucide Icons Modülü -->
     <script type="module">
-        // AlertTriangle ikonunun direkt içe aktarımı düzeltildi.
+        // İkonların ES modülü olarak doğru şekilde içe aktarılması
         import { createIcons, Search, TrendingUp, Cpu, X, ClipboardCopy, Users, Lightbulb, TrendingUp as Rising, Zap, BarChart, PieChart, CalendarCheck, Shield, AlertTriangle } from 'https://unpkg.com/lucide@latest';
         
         window.createIcons = () => {
@@ -22,18 +20,11 @@
         };
         window.createIcons();
         
-        // --- Service Worker Kaydı ---
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('service-worker.js')
-                    .then(registration => {
-                        console.log('Service Worker başarıyla kaydedildi:', registration);
-                    })
-                    .catch(error => {
-                        console.error('Service Worker kaydı başarısız oldu:', error);
-                    });
-            });
-        }
+        // **********************************************
+        // PWA KAYDI (Service Worker) KALDIRILDI
+        // Kalıcılık (Takip Listesi) sadece Firebase ile sağlanacaktır.
+        // **********************************************
+
     </script>
 
     <style>
@@ -102,7 +93,6 @@
         let auth;
         let userId = null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        // Firebase Config'in varlığını kontrol et
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
@@ -115,7 +105,14 @@
         const initFirebase = async () => {
             try {
                 if (!Object.keys(firebaseConfig).length) {
-                    throw new Error("Firebase yapılandırma bilgisi eksik.");
+                     // Yapılandırma eksikse, sadece arayüzü gösterip veritabanı işlemlerini pas geç
+                     document.getElementById('analysis-output').innerHTML = `
+                        <div class="text-yellow-700 mt-4 p-3 bg-yellow-100 rounded-lg">
+                            <p class="font-semibold">UYARI:</p>
+                            <p class="text-sm">Firebase bağlantısı eksik. Takip listesi kalıcı olarak kaydedilemeyecek.</p>
+                        </div>
+                    `;
+                    return;
                 }
                 
                 const app = initializeApp(firebaseConfig);
@@ -454,7 +451,7 @@
                     }
 
                     document.getElementById('analysis-output').innerHTML = `
-                        <div class="text-red-500 p-4 bg-red-50 rounded-xl border border-red-200">
+                        <div class="text-red-500 mt-4 p-3 bg-red-100 rounded-lg">
                             <p class="font-semibold">Analiz Hatası:</p>
                             <p class="text-sm">${displayMessage}</p>
                             <p class="mt-2 text-xs italic">Sunucu geçici olarak meşgul olabilir veya arama başarısız olmuş olabilir.</p>
@@ -1111,13 +1108,13 @@
         
         // --- RİSK MODU (GÜNCELLENDİ) ---
         const getRiskScore = (ticker) => {
-            const systemPrompt = `Sen bir anlık piyasa risk uzmanısın. Görevin, verilen hisse senedi hakkında (Örn: ${ticker}) en güncel **volatilite verilerini, haber akışının ciddiyetini ve likidite durumunu** Google Search kullanarak analiz ederek hissenin taşıdığı anlık riski skorlamaktır. Skoru **1 ile 10 arasında DAĞIT**. Skor 1-4 Düşük Risk, 5-6 Orta Risk, 7-10 Yüksek Risk anlamına gelir. Cevabını aşağıdaki KESİNLİKLE UYMAN GEREKEN formatta, Türkçe olarak sun:
+            const systemPrompt = `Sen bir anlık piyasa risk uzmanısın. Görevin, verilen hisse senedi hakkında (Örn: ${ticker}) en güncel **volatilite verilerini, haber akışının ciddiyetini ve likidite durumunu** Google Search kullanarak analiz ederek hissenin taşıdığı anlık riski skorlamaktır. Skoru **1 ile 10 arasında DAĞIT**. Skor 1-4 Düşük Risk, 5-6 Orta Risk, 7-10 Yüksek Risk anlamına gelir. Verdiğin sayısal skor ile metinsel değerlendirmen KESİNLİKLE UYUMLU ve GERÇEKÇİ olmalıdır. Cevabını aşağıdaki KESİNLİKLE UYMAN GEREKEN formatta, Türkçe olarak sun:
 
 Risk Durumu: [Düşük Risk | Orta Risk | Yüksek Risk]
 Risk Puanı: [1 ile 10 arasında net bir sayısal skor]
 ---
 ### Değerlendirme:
-   - Skora dayanarak hissenin anlık risk seviyesini (Düşük Risk, Orta Risk, Yüksek Risk) ve bunun yatırımcı için ne anlama geldiğini açıkla. Değerlendirme metni, yukarıdaki sayısal skor ile UYUMLU olmalıdır.
+   - Skora dayanarak hissenin anlık risk seviyesini (Düşük Risk, Orta Risk, Yüksek Risk) ve bunun yatırımcı için ne anlama geldiğini açıkla. Değerlendirme metni, yukarıdaki sayısal skor ile UYUMLU olmalıdır (Örn: Eğer skor 3 ise metin "Düşük Riskli" olarak başlamalıdır).
 ### Riski Yükselten Faktörler:
 - Hissenin anlık riskini artıran en önemli 3-4 faktörü (yüksek volatilite, olumsuz haber akışı, likidite düşüşü vb.) liste halinde özetle. **Her maddeyi detaylı bir cümle ile açıkla.**
 ### Riski Düşüren Faktörler (Güvenlik Payları):
@@ -1157,7 +1154,7 @@ Risk Puanı: [1 ile 10 arasında net bir sayısal skor]
         </div>
 
 
-        <!-- Analiz Giriş Alanı (GÜNCELLENDİ) -->
+        <!-- Analiz Giriş Alanı (GÜNCEL HIZ VE RİSK BUTONLARI) -->
         <div id="analysis-input-container" class="card-bg p-6 rounded-xl border border-gray-100 mb-8">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Mevcut Hisse İşlemleri</h2>
             <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
