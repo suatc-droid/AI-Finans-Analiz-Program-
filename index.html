@@ -19,8 +19,6 @@
             createIcons({ icons: { Search, TrendingUp, Cpu, X, ClipboardCopy, Users, Lightbulb, Rising, Zap, Activity: BarChart, PieChart, CalendarCheck, Shield, AlertTriangle } });
         };
         window.createIcons();
-        
-        // PWA kaydı (Service Worker) tamamen devre dışı bırakıldı.
     </script>
 
     <style>
@@ -111,20 +109,22 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
+                let authAttempt = Promise.resolve();
+
                 // Token varsa özel oturum açmayı dene
                 if (initialAuthToken) {
-                    try {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        console.log("Özel kimlik doğrulama başarılı.");
-                    } catch (error) {
+                    authAttempt = signInWithCustomToken(auth, initialAuthToken).catch(error => {
                         console.warn("Özel kimlik doğrulama başarısız oldu. Anonim oturum açılıyor:", error);
                         // Başarısız olursa anonim oturum açmaya geç
-                        await signInAnonymously(auth);
-                    }
+                        return signInAnonymously(auth);
+                    });
                 } else {
                      // Token yoksa anonim oturum aç
-                     await signInAnonymously(auth);
+                     authAttempt = signInAnonymously(auth);
                 }
+                
+                // Oturum açma denemesinin tamamlanmasını bekle
+                await authAttempt;
 
                 // Oturum açma tamamlandıktan sonra kullanıcı durumunu al
                 onAuthStateChanged(auth, (user) => {
