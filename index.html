@@ -20,11 +20,7 @@
         };
         window.createIcons();
         
-        // **********************************************
-        // PWA KAYDI (Service Worker) KALDIRILDI
-        // Kalıcılık (Takip Listesi) sadece Firebase ile sağlanacaktır.
-        // **********************************************
-
+        // PWA kaydı (Service Worker) tamamen devre dışı bırakıldı.
     </script>
 
     <style>
@@ -92,6 +88,7 @@
         let db;
         let auth;
         let userId = null;
+        // GÜVENLİ KONFİGÜRASYON ÇEKİŞİ
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
@@ -451,7 +448,7 @@
                     }
 
                     document.getElementById('analysis-output').innerHTML = `
-                        <div class="text-red-500 mt-4 p-3 bg-red-100 rounded-lg">
+                        <div class="text-red-500 p-4 bg-red-50 rounded-xl border border-red-200">
                             <p class="font-semibold">Analiz Hatası:</p>
                             <p class="text-sm">${displayMessage}</p>
                             <p class="mt-2 text-xs italic">Sunucu geçici olarak meşgul olabilir veya arama başarısız olmuş olabilir.</p>
@@ -1005,7 +1002,7 @@
      * **[Kaynak Adı/Banka Adı]**: Tavsiye **[Al/Sat/Tut]** (Hedef: [Fiyat/Durum]) - [Analizin Kısa Özeti/Yorumu].
 
 4. ### Kısa ve Orta Vadeli Fiyat Beklentisi:
-   - Kısa vadeli (1-3 gün) ve orta vadeli (1-2 hafta) teknik ve temel sinyalleri değerlendirerek, fiyatın yönelim ihtimalini analiz et ve net bir cümle ile belirt. Cevap 3-4 cümleyi geçmemelidir.
+   - Kısa vadeli (1-3 gün) ve orta vadeli (1-2 hafta) teknik ve temel sinyallerini değerlendirerek, fiyatın yönelim ihtimalini analiz et ve net bir cümle ile belirt. Cevap 3-4 cümleyi geçmemelidir.
 
 5. ### Nihai Yapay Zeka Tavsiyesi:
    - Tüm bu verileri sentezleyerek verdiğin nihai ve kesin tavsiye (Sadece: Hacimli Al, Al, Tut, Sat veya Güçlü Sat şeklinde tek kelime olmalıdır).`;
@@ -1106,7 +1103,7 @@
             return callGemini(systemPrompt, userQuery);
         };
         
-        // --- RİSK MODU (GÜNCELLENDİ) ---
+        // --- RİSK MODU (Mevcut) ---
         const getRiskScore = (ticker) => {
             const systemPrompt = `Sen bir anlık piyasa risk uzmanısın. Görevin, verilen hisse senedi hakkında (Örn: ${ticker}) en güncel **volatilite verilerini, haber akışının ciddiyetini ve likidite durumunu** Google Search kullanarak analiz ederek hissenin taşıdığı anlık riski skorlamaktır. Skoru **1 ile 10 arasında DAĞIT**. Skor 1-4 Düşük Risk, 5-6 Orta Risk, 7-10 Yüksek Risk anlamına gelir. Verdiğin sayısal skor ile metinsel değerlendirmen KESİNLİKLE UYUMLU ve GERÇEKÇİ olmalıdır. Cevabını aşağıdaki KESİNLİKLE UYMAN GEREKEN formatta, Türkçe olarak sun:
 
