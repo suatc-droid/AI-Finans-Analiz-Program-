@@ -13,11 +13,11 @@
     
     <!-- Lucide Icons Modülü -->
     <script type="module">
-        // İkonların ES modülü olarak doğru şekilde içe aktarılması
+        // AlertTriangle ikonunun direkt içe aktarımı düzeltildi.
         import { createIcons, Search, TrendingUp, Cpu, X, ClipboardCopy, Users, Lightbulb, TrendingUp as Rising, Zap, BarChart, PieChart, CalendarCheck, Shield, AlertTriangle } from 'https://unpkg.com/lucide@latest';
         
         window.createIcons = () => {
-            // İkonları doğru isimlerle kaydettiğimizden emin oluyoruz.
+            // Activity'yi BarChart ile eşleştiriyoruz.
             createIcons({ icons: { Search, TrendingUp, Cpu, X, ClipboardCopy, Users, Lightbulb, Rising, Zap, Activity: BarChart, PieChart, CalendarCheck, Shield, AlertTriangle } });
         };
         window.createIcons();
@@ -102,7 +102,8 @@
         let auth;
         let userId = null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        // Firebase Config'in varlığını kontrol et
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         const MODEL_NAME = 'gemini-2.5-flash-preview-09-2025';
@@ -110,9 +111,13 @@
         let trackedStocks = [];
         let isAuthReady = false;
 
-        // --- Firebase ve Kimlik Doğrulama İşlemleri ---
+        // --- Firebase ve Kimlik Doğrulama İşlemleri (GÜVENLİ BAŞLATMA) ---
         const initFirebase = async () => {
             try {
+                if (!Object.keys(firebaseConfig).length) {
+                    throw new Error("Firebase yapılandırma bilgisi eksik.");
+                }
+                
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
@@ -134,7 +139,13 @@
                 });
             } catch (error) {
                 console.error("Firebase başlatma hatası:", error);
-                document.getElementById('analysis-output').innerHTML = '<div class="text-red-500 mt-4 p-3 bg-red-100 rounded-lg">Uygulama başlatılamadı. Lütfen konsolu kontrol edin.</div>';
+                document.getElementById('analysis-output').innerHTML = `
+                    <div class="text-red-500 mt-4 p-3 bg-red-100 rounded-lg">
+                        <p class="font-semibold">Uygulama başlatılamadı.</p>
+                        <p class="text-sm">Hata: ${error.message || "Bilinmeyen bir Firebase başlatma hatası."}</p>
+                        <p class="text-xs italic mt-2">Lütfen ağ bağlantınızı veya konsol hatalarını kontrol edin.</p>
+                    </div>
+                `;
             }
         };
 
@@ -368,6 +379,7 @@
             window.handleAnalysisFlow(ticker, 'RISK');
         };
 
+
         // Mevcut Hisse Analiz Tıklama İşleyicisi (Derin Analiz)
         window.analyzeAndDisplay = (symbol = null) => {
             const ticker = symbol || document.getElementById('analysis-input').value.trim();
@@ -465,7 +477,6 @@
 
             // 1. Skoru metinden yakalama
             let score = 5;
-            // Risk Puanı: [Sayı] kalıbını arar
             const scoreMatch = riskText.match(/Risk Puanı:\s*([1-9]|10)/im); 
             if (scoreMatch && scoreMatch[1]) {
                 score = parseInt(scoreMatch[1]);
@@ -507,6 +518,7 @@
             // 4. Kalan fazla boşlukları temizle
             summaryContent = summaryContent.replace(/###\s*/g, '### ').trim();
 
+
             let sourcesHtml = generateSourcesHtml(sources);
             
             document.getElementById('analysis-output').innerHTML = `
@@ -535,6 +547,7 @@
             }
         };
 
+
         // --- YENİ: Günlük Analiz Sonucu Görüntüleme (Mevcut) ---
         const displayDailyResult = (ticker, result) => { /* ... (Mevcut) ... */
             const dailyText = result.text;
@@ -554,6 +567,7 @@
             const recText = formattedRec.text;
 
             let summaryContent = dailyText.replace(/Günlük Hızlı Tavsiye:\s*([^\n]+)/i, '').trim();
+
 
             document.getElementById('analysis-output').innerHTML = `
                 <div class="card-bg p-6 rounded-xl border border-gray-100 mb-6">
@@ -864,6 +878,7 @@
             return sourcesHtml;
         };
 
+
         const formatRecommendation = (rec) => { /* ... (Mevcut) ... */
             switch (rec) {
                 case 'al':
@@ -975,6 +990,7 @@
             throw new Error(`Maksimum deneme sayısına ulaşıldı. Analiz yapılamadı: ${lastError.message || "Bilinmeyen bir iletişim hatası."}`);
         };
 
+
         // --- ANALİZ MODU (Mevcut) ---
         const analyzeStock = (ticker) => {
             const systemPrompt = `Sen, küresel finans piyasalarında derinlemesine analizler yapan bir Yapay Zeka Baş Analistisin. Görevin, verilen hisse senedi hakkında (örn: ${ticker}) en güncel piyasa haberlerini, ünlü yorumcuların, büyük bankaların ve önemli yatırımcıların analizlerini Google Search kullanarak derinlemesine araştırmaktır. Cevabını aşağıdaki 5 bölümlü, detaylı Markdown formatında, Türkçe olarak KESİNLİKLE sun:
@@ -992,7 +1008,7 @@
      * **[Kaynak Adı/Banka Adı]**: Tavsiye **[Al/Sat/Tut]** (Hedef: [Fiyat/Durum]) - [Analizin Kısa Özeti/Yorumu].
 
 4. ### Kısa ve Orta Vadeli Fiyat Beklentisi:
-   - Kısa vadeli (1-3 gün) ve orta vadeli (1-2 hafta) teknik ve temel sinyallerini değerlendirerek, fiyatın yönelim ihtimalini analiz et ve net bir cümle ile belirt. Cevap 3-4 cümleyi geçmemelidir.
+   - Kısa vadeli (1-3 gün) ve orta vadeli (1-2 hafta) teknik ve temel sinyalleri değerlendirerek, fiyatın yönelim ihtimalini analiz et ve net bir cümle ile belirt. Cevap 3-4 cümleyi geçmemelidir.
 
 5. ### Nihai Yapay Zeka Tavsiyesi:
    - Tüm bu verileri sentezleyerek verdiğin nihai ve kesin tavsiye (Sadece: Hacimli Al, Al, Tut, Sat veya Güçlü Sat şeklinde tek kelime olmalıdır).`;
@@ -1101,7 +1117,7 @@ Risk Durumu: [Düşük Risk | Orta Risk | Yüksek Risk]
 Risk Puanı: [1 ile 10 arasında net bir sayısal skor]
 ---
 ### Değerlendirme:
-   - Skora dayanarak hissenin anlık risk seviyesini (Risk Durumu: Düşük Risk, Orta Risk, Yüksek Risk) ve bunun yatırımcı için ne anlama geldiğini açıkla. Değerlendirme metni, yukarıdaki sayısal skor ile UYUMLU olmalıdır.
+   - Skora dayanarak hissenin anlık risk seviyesini (Düşük Risk, Orta Risk, Yüksek Risk) ve bunun yatırımcı için ne anlama geldiğini açıkla. Değerlendirme metni, yukarıdaki sayısal skor ile UYUMLU olmalıdır.
 ### Riski Yükselten Faktörler:
 - Hissenin anlık riskini artıran en önemli 3-4 faktörü (yüksek volatilite, olumsuz haber akışı, likidite düşüşü vb.) liste halinde özetle. **Her maddeyi detaylı bir cümle ile açıkla.**
 ### Riski Düşüren Faktörler (Güvenlik Payları):
@@ -1110,6 +1126,7 @@ Risk Puanı: [1 ile 10 arasında net bir sayısal skor]
             const userQuery = `${ticker} hisse senedi için anlık risk skoru (1-10) ve bu skoru etkileyen faktörler hakkında bir rapor hazırla.`;
             return callGemini(systemPrompt, userQuery);
         };
+
 
         // Uygulama başlatma
         window.onload = initFirebase;
@@ -1138,6 +1155,7 @@ Risk Puanı: [1 ile 10 arasında net bir sayısal skor]
                 <i data-lucide="activity" class="w-5 h-5 mr-2"></i> KÜRESEL PİYASA DUYARLILIĞINI ÖLÇ
             </button>
         </div>
+
 
         <!-- Analiz Giriş Alanı (GÜNCELLENDİ) -->
         <div id="analysis-input-container" class="card-bg p-6 rounded-xl border border-gray-100 mb-8">
@@ -1233,3 +1251,4 @@ Risk Puanı: [1 ile 10 arasında net bir sayısal skor]
     </div>
 </body>
 </html>
+
