@@ -103,20 +103,31 @@
             try {
                 if (!Object.keys(firebaseConfig).length) {
                      // Yapılandırma eksikse, sadece arayüzü gösterip veritabanı işlemlerini pas geç
-                     document.getElementById('analysis-output').innerHTML = `
-                        <div class="text-yellow-700 mt-4 p-3 bg-yellow-100 rounded-lg">
-                            <p class="font-semibold">UYARI:</p>
-                            <p class="text-sm">Firebase bağlantısı eksik. Takip listesi kalıcı olarak kaydedilemeyecek.</p>
-                        </div>
-                    `;
-                    return;
+                     document.getElementById('user-id-display').textContent = 'BAĞLANTI YOK';
+                     return;
                 }
                 
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                onAuthStateChanged(auth, async (user) => {
+                // Token varsa özel oturum açmayı dene
+                if (initialAuthToken) {
+                    try {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        console.log("Özel kimlik doğrulama başarılı.");
+                    } catch (error) {
+                        console.warn("Özel kimlik doğrulama başarısız oldu. Anonim oturum açılıyor:", error);
+                        // Başarısız olursa anonim oturum açmaya geç
+                        await signInAnonymously(auth);
+                    }
+                } else {
+                     // Token yoksa anonim oturum aç
+                     await signInAnonymously(auth);
+                }
+
+                // Oturum açma tamamlandıktan sonra kullanıcı durumunu al
+                onAuthStateChanged(auth, (user) => {
                     if (user) {
                         userId = user.uid;
                         document.getElementById('user-id-display').textContent = userId;
@@ -124,13 +135,10 @@
                         // KULLANICI HAZIR OLUNCA DİNLEYİCİYİ BAŞLAT
                         setupStockListener();
                     } else {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
+                        document.getElementById('user-id-display').textContent = 'Anonim Oturum';
                     }
                 });
+
             } catch (error) {
                 console.error("Firebase başlatma hatası:", error);
                 document.getElementById('analysis-output').innerHTML = `
