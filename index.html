@@ -3,1256 +3,432 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Finans Asistanı</title>
-    <!-- Tailwind CSS CDN -->
+    <title>AI Finans Asistanı V02.5</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Inter Font -->
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Lucide Icons Modülü -->
-    <script type="module">
-        // İkonların ES modülü olarak doğru şekilde içe aktarılması
-        import { createIcons, Search, TrendingUp, Cpu, X, ClipboardCopy, Users, Lightbulb, TrendingUp as Rising, Zap, BarChart, PieChart, CalendarCheck, Shield, AlertTriangle } from 'https://unpkg.com/lucide@latest';
-        
-        window.createIcons = () => {
-            // Activity'yi BarChart ile eşleştiriyoruz.
-            createIcons({ icons: { Search, TrendingUp, Cpu, X, ClipboardCopy, Users, Lightbulb, Rising, Zap, Activity: BarChart, PieChart, CalendarCheck, Shield, AlertTriangle } });
-        };
-        window.createIcons();
-        
-        // PWA kaydı (Service Worker) tamamen devre dışı bırakıldı.
-    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f7f9fb;
-        }
-        /* Tavsiye Sınıfları */
-        .recommendation-al { background-color: #10b981; color: white; } 
-        .recommendation-tut { background-color: #f59e0b; color: white; } 
-        .recommendation-sat { background-color: #ef4444; color: white; } 
-        .recommendation-hacim-al { background-color: #059669; color: white; } 
-        .recommendation-guclu-sat { background-color: #dc2626; color: white; } 
-        /* Yeni Giren Hisse Öneri Rengi */
-        .new-potential { background-color: #dc2626; color: white; } /* Red-600 */
-        /* Güncel Hız Rengi */
-        .market-speed { background-color: #2563eb; color: white; } /* Blue-600 */
-        /* Duyarlılık Endeksi Renkleri */
-        .sentiment-low { background-color: #6d28d9; } 
-        .sentiment-mid-low { background-color: #f59e0b; } 
-        .sentiment-mid-high { background-color: #22c55e; } 
-        .sentiment-high { background-color: #16a34a; } 
-        /* Günlük Analiz Rengi */
-        .daily-analysis { background-color: #0d9488; color: white; } /* Teal-600 */
-        /* Risk Skoru Renkleri */
-        .risk-low { background-color: #22c55e; }
-        .risk-medium { background-color: #f59e0b; }
-        .risk-high { background-color: #ef4444; }
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        .card-bg { background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        
+        /* Risk Renkleri */
+        .risk-low { background-color: #22c55e; }    /* Yeşil */
+        .risk-medium { background-color: #f59e0b; } /* Turuncu */
+        .risk-high { background-color: #ef4444; }   /* Kırmızı */
 
-        .card-bg {
-            background-color: #ffffff;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-        }
-        /* Markdown Stil Düzeltmeleri */
-        .prose h3 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin-top: 1.5rem; 
-            margin-bottom: 0.75rem;
-            color: #1f2937;
-            border-bottom: 1px solid #e5e7eb;
-            padding-bottom: 0.25rem;
-        }
-        .prose ul {
-            list-style: disc;
-            padding-left: 1.5rem;
-            margin-bottom: 1rem;
-        }
-        .prose p {
-            margin-bottom: 1rem;
-        }
-        .prose strong {
-            font-weight: 700;
-        }
+        /* Markdown Stilleri */
+        .prose h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1rem; margin-bottom: 0.5rem; color: #374151; }
+        .prose ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; }
+        .prose li { margin-bottom: 0.25rem; }
+        .prose p { margin-bottom: 0.75rem; }
+        .prose strong { font-weight: 600; color: #111827; }
     </style>
-    <script type="module">
-        // Firebase Modülleri
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        setLogLevel('Debug');
-
-        let db;
-        let auth;
-        let userId = null;
-        // GÜVENLİ KONFİGÜRASYON ÇEKİŞİ
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        const MODEL_NAME = 'gemini-2.5-flash-preview-09-2025';
-
-        let trackedStocks = [];
-        let isAuthReady = false;
-
-        // --- Firebase ve Kimlik Doğrulama İşlemleri (GÜVENLİ BAŞLATMA) ---
-        const initFirebase = async () => {
-            try {
-                if (!Object.keys(firebaseConfig).length) {
-                     // Yapılandırma eksikse, sadece arayüzü gösterip veritabanı işlemlerini pas geç
-                     document.getElementById('user-id-display').textContent = 'BAĞLANTI YOK';
-                     return;
-                }
-                
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-
-                let authAttempt = Promise.resolve();
-
-                // Token varsa özel oturum açmayı dene
-                if (initialAuthToken) {
-                    authAttempt = signInWithCustomToken(auth, initialAuthToken).catch(error => {
-                        console.warn("Özel kimlik doğrulama başarısız oldu. Anonim oturum açılıyor:", error);
-                        // Başarısız olursa anonim oturum açmaya geç
-                        return signInAnonymously(auth);
-                    });
-                } else {
-                     // Token yoksa anonim oturum aç
-                     authAttempt = signInAnonymously(auth);
-                }
-                
-                // Oturum açma denemesinin tamamlanmasını bekle
-                await authAttempt;
-
-                // Oturum açma tamamlandıktan sonra kullanıcı durumunu al
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        document.getElementById('user-id-display').textContent = userId;
-                        isAuthReady = true;
-                        // KULLANICI HAZIR OLUNCA DİNLEYİCİYİ BAŞLAT
-                        setupStockListener();
-                    } else {
-                        document.getElementById('user-id-display').textContent = 'Anonim Oturum';
-                    }
-                });
-
-            } catch (error) {
-                console.error("Firebase başlatma hatası:", error);
-                document.getElementById('analysis-output').innerHTML = `
-                    <div class="text-red-500 mt-4 p-3 bg-red-100 rounded-lg">
-                        <p class="font-semibold">Uygulama başlatılamadı.</p>
-                        <p class="text-sm">Hata: ${error.message || "Bilinmeyen bir Firebase başlatma hatası."}</p>
-                        <p class="text-xs italic mt-2">Lütfen ağ bağlantınızı veya konsol hatalarını kontrol edin.</p>
-                    </div>
-                `;
-            }
-        };
-
-        // --- Firestore İşlemleri ---
-        const getStockCollectionRef = (uid) => {
-            // Firestore yolu: /artifacts/{appId}/users/{userId}/tracked_stocks
-            return collection(db, `artifacts/${appId}/users/${uid}/tracked_stocks`);
-        };
-
-        const setupStockListener = () => {
-            // Kalıcılık için setupStockListener artık sadece onAuthStateChanged tamamlandığında çağrılıyor.
-            if (!db || !userId) return; 
-
-            const stockRef = getStockCollectionRef(userId);
-            // Firestore'dan verileri gerçek zamanlı dinle
-            onSnapshot(stockRef, (snapshot) => {
-                const stocks = [];
-                snapshot.forEach(doc => {
-                    // Doküman ID'sini kullanarak ekleme yapıyoruz
-                    stocks.push({ id: doc.id, ...doc.data() });
-                });
-                trackedStocks = stocks;
-                renderTrackedStocks();
-                console.log("Güncel takip edilen hisseler (Kalıcı):", trackedStocks);
-            }, (error) => {
-                console.error("Hisse dinleme hatası:", error);
-            });
-        };
-
-        // Borsa Bulucu Fonksiyonu (YENİ)
-        const findStockMarket = async (symbol) => {
-            const systemPrompt = `Sen bir borsa uzmanısın. Görevin, verilen hisse senedi sembolünün veya adının işlem gördüğü ana borsayı (Örn: BIST, NASDAQ, NYSE, LSE) Google Search kullanarak bulmaktır. Cevap olarak sadece hissenin ana borsa adını (Örn: Sadece NASDAQ, Sadece BIST gibi) veya ülke adını (Örn: Tokyo) tek kelime veya kısa bir kısaltma olarak dön. Eğer bulunamazsa 'Bilinmiyor' olarak dön.`;
-            const userQuery = `${symbol} hissesi hangi borsada işlem görmektedir?`;
-
-            try {
-                const result = await callGemini(systemPrompt, userQuery);
-                let market = result.text.trim().toUpperCase().replace(/[^A-ZÇĞIİÖŞÜ\s]/g, '');
-                
-                // Popüler borsaların temizlenmesi ve kesinleştirilmesi
-                if (market.includes('NASDAQ')) return 'NASDAQ';
-                if (market.includes('NYSE')) return 'NYSE';
-                if (market.includes('BIST') || market === 'BİST' || market === 'BORSAISTANBUL') return 'BIST';
-                if (market.includes('LSE')) return 'LSE';
-                if (market.length < 2) return 'GLOBAL'; // Çok kısa veya anlamsızsa global say
-                
-                return market;
-
-            } catch (error) {
-                console.warn(`Borsa tespiti sırasında hata: ${error.message}`);
-                return 'HATA/GLOBAL';
-            }
-        };
-
-        window.addStockToTracking = async (symbol) => {
-            if (!db || !userId) {
-                showMessage("Hata: Uygulama henüz başlatılmadı veya kullanıcı doğrulanamadı.", 'sat');
-                return;
-            }
-            const normalizedSymbol = symbol.trim().toUpperCase();
-            
-            if (normalizedSymbol === "") {
-                showMessage("Geçerli bir hisse sembolü girin.", 'sat');
-                return;
-            }
-            
-            showMessage(`Borsa tespit ediliyor... (${normalizedSymbol})`, 'tut');
-            let finalMarket = await findStockMarket(normalizedSymbol);
-            
-            const docId = `${normalizedSymbol}_${finalMarket}`;
-
-            if (trackedStocks.some(s => s.id === docId)) {
-                showMessage(`Bu hisse (${normalizedSymbol} / ${finalMarket}) zaten takip listenizde.`, 'tut');
-                return;
-            }
-            
-            try {
-                const stockDocRef = doc(getStockCollectionRef(userId), docId); 
-                await setDoc(stockDocRef, {
-                    symbol: normalizedSymbol,
-                    market: finalMarket, 
-                    addedAt: new Date().toISOString()
-                });
-                showMessage(`${normalizedSymbol} (${finalMarket}) takip listenize eklendi.`, 'al');
-            } catch (error) {
-                console.error("Hisse ekleme hatası:", error);
-                showMessage("Hisse eklenirken bir hata oluştu.", 'sat');
-            }
-        };
-
-        window.removeStockFromTracking = async (id) => {
-            if (!db || !userId) {
-                console.error("Firebase veya Kullanıcı Kimliği hazır değil.");
-                return;
-            }
-            try {
-                // Doküman ID'sini kullanarak silme işlemi yapıyoruz
-                const stockDocRef = doc(getStockCollectionRef(userId), id);
-                await deleteDoc(stockDocRef);
-                showMessage(`${id.split('_')[0]} takip listenizden kaldırıldı.`, 'sat');
-            } catch (error) {
-                console.error("Hisse kaldırılırken bir hata oluştu.", 'sat');
-                showMessage("Hisse kaldırılırken bir hata oluştu.", 'sat');
-            }
-        };
-
-        // --- UI İşlemleri ---
-        const renderTrackedStocks = () => {
-            const listElement = document.getElementById('tracked-stocks-list');
-            listElement.innerHTML = ''; 
-
-            if (trackedStocks.length === 0) {
-                listElement.innerHTML = '<li class="p-3 text-center text-gray-500 italic">Henüz takip edilen hisse yok.</li>';
-                return;
-            }
-            
-            // Hisseleri borsaya göre grupla
-            const groupedStocks = trackedStocks.reduce((acc, stock) => {
-                const market = stock.market || 'BIST (Varsayılan)';
-                if (!acc[market]) {
-                    acc[market] = [];
-                }
-                acc[market].push(stock);
-                return acc;
-            }, {});
-            
-            // Gruplanmış hisseleri arayüzde göster
-            for (const market in groupedStocks) {
-                const marketHeader = document.createElement('h3');
-                marketHeader.className = 'text-lg font-bold text-gray-700 mt-4 mb-2 p-2 bg-gray-100 rounded-md';
-                marketHeader.textContent = `${market} Hisseleri (${groupedStocks[market].length} adet)`;
-                listElement.appendChild(marketHeader);
-
-                groupedStocks[market].forEach(stock => {
-                    const li = document.createElement('li');
-                    li.className = 'flex justify-between items-center p-3 mb-2 card-bg rounded-lg border border-gray-100';
-                    li.innerHTML = `
-                        <span class="font-semibold text-gray-700">${stock.symbol}</span>
-                        <div class="flex space-x-2">
-                            <!-- Günlük Analiz Butonu -->
-                            <button onclick="handleAnalysisFlow('${stock.symbol}', 'DAILY')" class="text-sm daily-analysis hover:bg-teal-700 text-white font-medium py-1 px-3 rounded-md transition duration-150 ease-in-out">
-                                Günlük
-                            </button>
-                            <!-- Derinlemesine Analiz Butonu -->
-                            <button onclick="handleAnalysisFlow('${stock.symbol}', 'ANALYSIS')" class="text-sm bg-blue-500 hover:bg-blue-600 text-white font-medium py-1 px-3 rounded-md transition duration-150 ease-in-out">
-                                Derin
-                            </button>
-                            <!-- Güncel Hız Butonu -->
-                            <button onclick="handleAnalysisFlow('${stock.symbol}', 'SPEED')" class="text-sm bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-1 px-3 rounded-md transition duration-150 ease-in-out">
-                                Hız
-                            </button>
-                            <button onclick="removeStockFromTracking('${stock.id}')" class="text-gray-400 hover:text-red-500 p-1 rounded-full transition duration-150 ease-in-out">
-                                <i data-lucide="x" class="w-4 h-4"></i>
-                            </button>
-                        </div>
-                    `;
-                    listElement.appendChild(li);
-                });
-            }
-
-            if (typeof window.createIcons === 'function') {
-                window.createIcons();
-            }
-        };
-
-        window.handleTrackingFormSubmit = (event) => {
-            event.preventDefault();
-            const symbolInput = document.getElementById('new-stock-symbol');
-            const symbol = symbolInput.value.trim();
-            
-            if (symbol) {
-                // Borsa bilgisi findStockMarket tarafından bulunacak
-                window.addStockToTracking(symbol);
-                symbolInput.value = '';
-            }
-        };
-        
-        // --- Duyarlılık Ölçer Butonu Tıklama İşleyicisi ---
-        window.handleSentimentClick = () => {
-            window.handleAnalysisFlow(null, 'SENTIMENT');
-        };
-
-        // --- Kriterlere Göre Öneri Butonu Tıklama İşleyicisi ---
-        window.handleSuggestClick = () => {
-            const country = document.getElementById('suggestion-country').value.trim();
-            const sector = document.getElementById('suggestion-sector').value.trim();
-            const criteria = document.getElementById('suggestion-criteria').value.trim();
-            
-            if (!country && !sector && !criteria) {
-                showMessage("Lütfen en az bir öneri kriteri (Ülke, Sektör veya Strateji) girin.", 'tut');
-                return;
-            }
-
-            window.handleAnalysisFlow({ country, sector, criteria }, 'SUGGESTION');
-        };
-
-        // --- Yüksek Potansiyelli Öneri Butonu Tıklama İşleyicisi ---
-        window.handleNewPotentialClick = () => {
-            const country = document.getElementById('suggestion-country').value.trim();
-            const sector = document.getElementById('suggestion-sector').value.trim();
-            const criteria = "Yeni Piyasaya Giren ve Yüksek Potansiyelli"; 
-
-            window.handleAnalysisFlow({ country, sector, criteria }, 'SUGGESTION');
-        };
-        
-        // --- Portföy Simülasyonu Butonu Tıklama İşleyicisi ---
-        window.handlePortfolioClick = () => {
-            const country = document.getElementById('suggestion-country').value.trim();
-            const sector = document.getElementById('suggestion-sector').value.trim();
-            const criteria = document.getElementById('suggestion-criteria').value.trim() || "Risk dağıtılmış, dengeli portföy"; 
-
-            window.handleAnalysisFlow({ country, sector, criteria }, 'PORTFOLIO');
-        };
-        
-        // --- Günlük Analiz Butonu Tıklama İşleyicisi ---
-        window.handleDailyClick = (symbol = null) => {
-             const ticker = symbol || document.getElementById('analysis-input').value.trim();
-            if (!ticker) {
-                showMessage("Lütfen günlük analizini görmek istediğiniz hisse sembolünü girin.", 'tut');
-                return;
-            }
-            window.handleAnalysisFlow(ticker, 'DAILY');
-        };
-
-        // --- RİSK SKORLAYICI Butonu Tıklama İşleyicisi ---
-        window.handleRiskClick = () => {
-            const ticker = document.getElementById('analysis-input').value.trim();
-            if (!ticker) {
-                showMessage("Lütfen risk skorunu hesaplamak istediğiniz hisse sembolünü girin.", 'sat');
-                return;
-            }
-            window.handleAnalysisFlow(ticker, 'RISK');
-        };
-
-
-        // Mevcut Hisse Analiz Tıklama İşleyicisi (Derin Analiz)
-        window.analyzeAndDisplay = (symbol = null) => {
-            const ticker = symbol || document.getElementById('analysis-input').value.trim();
-            if (!ticker) {
-                showMessage("Lütfen analiz etmek istediğiniz hisse senedi sembolünü veya adını girin.", 'tut');
-                return;
-            }
-            window.handleAnalysisFlow(ticker, 'ANALYSIS');
-        };
-        
-        // --- Güncel Piyasa Hızı Butonu Tıklama İşleyicisi ---
-        window.handleSpeedClick = (symbol = null) => {
-             const ticker = symbol || document.getElementById('analysis-input').value.trim();
-            if (!ticker) {
-                showMessage("Lütfen güncel hızını öğrenmek istediğiniz hisse sembolünü girin.", 'tut');
-                return;
-            }
-            window.handleAnalysisFlow(ticker, 'SPEED');
-        };
-
-        // --- Ortak Analiz Akış Fonksiyonu (GLOBAL YAPILDI) ---
-        window.handleAnalysisFlow = (input, mode) => {
-            // UI'yı Hazırla
-            document.getElementById('analysis-input-container').classList.add('hidden');
-            document.getElementById('suggestion-input-container').classList.add('hidden');
-            document.getElementById('analysis-loading').classList.remove('hidden');
-            document.getElementById('analysis-output').innerHTML = '';
-
-            let callPromise;
-            if (mode === 'ANALYSIS') {
-                callPromise = analyzeStock(input);
-            } else if (mode === 'SUGGESTION') {
-                callPromise = suggestStock(input.country, input.sector, input.criteria);
-            } else if (mode === 'SPEED') {
-                callPromise = getMarketSpeed(input);
-            } else if (mode === 'SENTIMENT') {
-                callPromise = getSentimentScore();
-            } else if (mode === 'PORTFOLIO') {
-                callPromise = simulatePortfolio(input.country, input.sector, input.criteria);
-            } else if (mode === 'DAILY') {
-                callPromise = getDailyAnalysis(input);
-            } else if (mode === 'RISK') { // Yeni Mod
-                callPromise = getRiskScore(input);
-            }
-
-            callPromise
-                .then(result => {
-                    if (mode === 'ANALYSIS') {
-                        displayAnalysisResult(input, result);
-                    } else if (mode === 'SUGGESTION') {
-                        displaySuggestionResult(input, result);
-                    } else if (mode === 'SPEED') {
-                        displaySpeedResult(input, result);
-                    } else if (mode === 'SENTIMENT') {
-                        displaySentimentResult(result);
-                    } else if (mode === 'PORTFOLIO') {
-                        displayPortfolioResult(input, result);
-                    } else if (mode === 'DAILY') {
-                        displayDailyResult(input, result);
-                    } else if (mode === 'RISK') { // Yeni Mod Sonucu
-                        displayRiskResult(input, result);
-                    }
-                })
-                .catch(error => {
-                    console.error("API çağrısı sırasında hata:", error);
-                    let displayMessage = error.message || "Bilinmeyen bir hata oluştu.";
-
-                    if (error.message.includes('API Hatası 429')) {
-                         displayMessage = "Sunucu aşırı yüklü. Lütfen 1 dakika bekleyip tekrar deneyin.";
-                    } else if (error.message.includes('Maksimum deneme sayısına ulaşıldı')) {
-                         displayMessage = "Maksimum deneme sayısına ulaşıldı. Lütfen birkaç dakika sonra tekrar deneyin.";
-                    }
-
-                    document.getElementById('analysis-output').innerHTML = `
-                        <div class="text-red-500 p-4 bg-red-50 rounded-xl border border-red-200">
-                            <p class="font-semibold">Analiz Hatası:</p>
-                            <p class="text-sm">${displayMessage}</p>
-                            <p class="mt-2 text-xs italic">Sunucu geçici olarak meşgul olabilir veya arama başarısız olmuş olabilir.</p>
-                        </div>
-                    `;
-                })
-                .finally(() => {
-                    document.getElementById('analysis-loading').classList.add('hidden');
-                    document.getElementById('analysis-input-container').classList.remove('hidden');
-                    document.getElementById('suggestion-input-container').classList.remove('hidden');
-                    
-                    if (mode === 'ANALYSIS' || mode === 'SPEED' || mode === 'DAILY' || mode === 'RISK') document.getElementById('analysis-input').value = '';
-                });
-        };
-        
-        // --- RİSK SKORU Görüntüleme (KESİN SKOR EŞLEŞMESİ) ---
-        const displayRiskResult = (ticker, result) => {
-            const riskText = result.text;
-            const sources = result.sources;
-
-            // 1. Skoru metinden yakalama
-            let score = 5;
-            const scoreMatch = riskText.match(/Risk Puanı:\s*([1-9]|10)/im); 
-            if (scoreMatch && scoreMatch[1]) {
-                score = parseInt(scoreMatch[1]);
-            }
-            
-            // 2. Risk Durumunu metinden yakalama
-            let riskLabel = 'Orta Risk';
-            const riskLabelMatch = riskText.match(/Risk Durumu:\s*(Düşük Risk|Orta Risk|Yüksek Risk)/im);
-            if (riskLabelMatch && riskLabelMatch[1]) {
-                 riskLabel = riskLabelMatch[1].trim();
-            }
-
-            let riskClass = 'risk-medium';
-            // Risk Sınıflandırması
-            if (score >= 7) {
-                riskClass = 'risk-high';
-            } else if (score <= 4) {
-                riskClass = 'risk-low';
-            } else { 
-                riskClass = 'risk-medium';
-            }
-
-            // Metin içeriğini temizle
-            let summaryContent = riskText;
-            
-            // 1. Risk Durumu satırını temizle
-            summaryContent = summaryContent.replace(/Risk Durumu:.*$/im, '').trim();
-            
-            // 2. Risk Puanı satırını temizle
-            summaryContent = summaryContent.replace(/Risk Puanı:\s*([1-9]|10)/im, '').trim();
-
-            // 3. Değerlendirme başlığını ve altındaki ilk paragrafı temizle
-            summaryContent = summaryContent.replace(/### Değerlendirme:?/im, '').trim();
-            const firstParagraphMatch = summaryContent.match(/^([^\n]+)\n/);
-            if (firstParagraphMatch) {
-                summaryContent = summaryContent.replace(firstParagraphMatch[0], '').trim();
-            }
-            
-            // 4. Kalan fazla boşlukları temizle
-            summaryContent = summaryContent.replace(/###\s*/g, '### ').trim();
-
-
-            let sourcesHtml = generateSourcesHtml(sources);
-            
-            document.getElementById('analysis-output').innerHTML = `
-                <div class="card-bg p-6 rounded-xl border border-gray-100 mb-6">
-                    <h2 class="text-2xl font-bold mb-4 text-gray-800 flex items-center">
-                        <i data-lucide="shield" class="w-6 h-6 mr-2 text-red-600"></i>
-                        ${ticker} RİSK ANALİZİ
-                    </h2>
-
-                    <!-- RİSK KARTI (YAZILI SKOR) -->
-                    <div class="p-6 rounded-xl mb-6 text-white ${riskClass} flex flex-col justify-center items-center">
-                        <span class="text-3xl font-extrabold tracking-wider mb-2">${riskLabel} (${score})</span>
-                        <span class="text-sm font-medium">1 (En Düşük) - 10 (En Yüksek)</span>
-                    </div>
-
-                    <!-- Analiz Metni (Markdown'dan HTML'e çevrilmiş) -->
-                    <div class="prose max-w-none text-gray-700 leading-relaxed">
-                        ${markdownToHtml(summaryContent)}
-                    </div>
-
-                    ${sourcesHtml}
-                </div>
-            `;
-            if (typeof window.createIcons === 'function') {
-                window.createIcons();
-            }
-        };
-
-
-        // --- YENİ: Günlük Analiz Sonucu Görüntüleme (Mevcut) ---
-        const displayDailyResult = (ticker, result) => { /* ... (Mevcut) ... */
-            const dailyText = result.text;
-            const sources = result.sources;
-
-            let sourcesHtml = generateSourcesHtml(sources);
-            
-            // Günlük Hızlı Tavsiyeyi metinden çek
-            let dailyRec = "TUT";
-            const recMatch = dailyText.match(/Günlük Hızlı Tavsiye:\s*([^\n]+)/i);
-            if (recMatch && recMatch[1]) {
-                dailyRec = recMatch[1].trim().toUpperCase().replace(/[^A-ZÇĞIİÖŞÜ\s]/g, ''); 
-            }
-            
-            const formattedRec = formatRecommendation(dailyRec.toLowerCase().replace(/\s/g, ''));
-            const recClassName = `recommendation-${formattedRec.class}`;
-            const recText = formattedRec.text;
-
-            let summaryContent = dailyText.replace(/Günlük Hızlı Tavsiye:\s*([^\n]+)/i, '').trim();
-
-
-            document.getElementById('analysis-output').innerHTML = `
-                <div class="card-bg p-6 rounded-xl border border-gray-100 mb-6">
-                    <h2 class="text-2xl font-bold mb-4 text-gray-800 flex items-center">
-                        <i data-lucide="calendar-check" class="w-6 h-6 mr-2 text-teal-600"></i>
-                        ${ticker} GÜNLÜK MOMENTUM ANALİZİ
-                    </h2>
-
-                    <!-- Günlük Tavsiye -->
-                    <div class="p-4 rounded-xl mb-6 ${recClassName} flex justify-between items-center">
-                        <span class="text-xl font-bold">Günlük Hızlı Tavsiye:</span>
-                        <span class="text-3xl font-extrabold tracking-wider">${recText}</span>
-                    </div>
-
-                    <!-- Analiz Metni (Markdown'dan HTML'e çevrilmiş) -->
-                    <div class="prose max-w-none text-gray-700 leading-relaxed">
-                        ${markdownToHtml(summaryContent)}
-                    </div>
-
-                    ${sourcesHtml}
-                </div>
-            `;
-            if (typeof window.createIcons === 'function') {
-                window.createIcons();
-            }
-        };
-
-        // --- Portföy Simülasyonu Sonucu Görüntüleme (Mevcut) ---
-        const displayPortfolioResult = (input, result) => { /* ... (Mevcut) ... */
-            const portfolioText = result.text;
-            const sources = result.sources;
-            
-            const criteriaList = [];
-            if (input.country) criteriaList.push(`Borsa / Ülke: **${input.country}**`);
-            if (input.sector) criteriaList.push(`Sektör: **${input.sector}**`);
-            if (input.criteria) criteriaList.push(`Strateji: **${input.criteria}**`);
-            const combinedCriteria = criteriaList.join(' | ');
-
-            let sourcesHtml = generateSourcesHtml(sources);
-            
-            document.getElementById('analysis-output').innerHTML = `
-                <div class="card-bg p-6 rounded-xl border border-gray-100 mb-6">
-                    <h2 class="text-2xl font-bold mb-4 text-gray-800 flex items-center">
-                        <i data-lucide="pie-chart" class="w-6 h-6 mr-2 text-green-600"></i>
-                        YAPAY ZEKA SANAL PORTFÖY SİMÜLATÖRÜ
-                    </h2>
-
-                    <!-- Kriterler -->
-                    <div class="p-4 bg-purple-50 text-purple-800 rounded-lg mb-6 border-l-4 border-purple-500">
-                        <p class="font-bold mb-1">Portföy Kriterleri:</p>
-                        <p class="text-sm">${combinedCriteria}</p>
-                    </div>
-
-                    <!-- Analiz Metni (Markdown'dan HTML'e çevrilmiş) -->
-                    <div class="prose max-w-none text-gray-700 leading-relaxed">
-                        ${markdownToHtml(portfolioText)}
-                    </div>
-
-                    ${sourcesHtml}
-                </div>
-            `;
-            if (typeof window.createIcons === 'function') {
-                window.createIcons();
-            }
-        };
-
-        // --- Duyarlılık Skoru Görüntüleme (Mevcut) ---
-        const displaySentimentResult = (result) => { /* ... (Mevcut) ... */
-            const sentimentText = result.text;
-            const sources = result.sources;
-
-            let score = 50;
-            const scoreMatch = sentimentText.match(/Skor:\s*(\d+)/i);
-            if (scoreMatch && scoreMatch[1]) {
-                score = parseInt(scoreMatch[1]);
-            }
-
-            let sentimentClass = 'bg-gray-400';
-            let sentimentLabel = 'Nötr';
-
-            if (score <= 25) {
-                sentimentClass = 'sentiment-low';
-                sentimentLabel = 'Aşırı Korku';
-            } else if (score <= 45) {
-                sentimentClass = 'sentiment-mid-low';
-                sentimentLabel = 'Korku';
-            } else if (score >= 75) {
-                sentimentClass = 'sentiment-high';
-                sentimentLabel = 'Aşırı Açgözlülük';
-            } else if (score >= 55) {
-                sentimentClass = 'sentiment-mid-high';
-                sentimentLabel = 'Açgözlülük';
-            }
-
-            let content = sentimentText.replace(/Skor:\s*\d+/i, '').replace(/### Duyarlılık Durumu:\s*([^\n]+)/i, '').trim();
-
-            let sourcesHtml = generateSourcesHtml(sources);
-
-            document.getElementById('analysis-output').innerHTML = `
-                <div class="card-bg p-6 rounded-xl border border-gray-100 mb-6">
-                    <h2 class="text-2xl font-bold mb-4 text-gray-800 flex items-center">
-                        <i data-lucide="activity" class="w-6 h-6 mr-2 text-purple-600"></i>
-                        Küresel Piyasa Duyarlılık Endeksi
-                    </h2>
-
-                    <!-- Skor ve Özet -->
-                    <div class="p-6 rounded-xl mb-6 text-white ${sentimentClass}">
-                        <div class="flex justify-between items-center mb-3">
-                            <span class="text-xl font-bold">Güncel Duyarlılık Skoru (1-100):</span>
-                            <span class="text-4xl font-extrabold">${score}</span>
-                        </div>
-                        <div class="text-center">
-                            <span class="text-2xl font-bold">${sentimentLabel}</span>
-                        </div>
-                        
-                        <!-- İlerleme Çubuğu -->
-                        <div class="w-full bg-gray-200 rounded-full h-2.5 mt-4">
-                            <div class="h-2.5 rounded-full ${score <= 50 ? 'bg-yellow-500' : 'bg-green-500'}" style="width: ${score}%;"></div>
-                        </div>
-                        <div class="flex justify-between text-xs mt-1 text-gray-100">
-                            <span>Korku (1)</span>
-                            <span>Nötr (50)</span>
-                            <span>Açgözlülük (100)</span>
-                        </div>
-                    </div>
-
-                    <!-- Analiz Metni -->
-                    <div class="prose max-w-none text-gray-700 leading-relaxed">
-                        ${markdownToHtml(content)}
-                    </div>
-
-                    ${sourcesHtml}
-                </div>
-            `;
-            if (typeof window.createIcons === 'function') {
-                window.createIcons();
-            }
-        };
-
-        // --- Güncel Piyasa Hızı Sonucu Görüntüleme (Mevcut) ---
-        const displaySpeedResult = (ticker, result) => { /* ... (Mevcut) ... */
-            const speedText = result.text;
-            const sources = result.sources;
-
-            let sourcesHtml = generateSourcesHtml(sources);
-            
-            document.getElementById('analysis-output').innerHTML = `
-                <div class="card-bg p-6 rounded-xl border border-gray-100 mb-6">
-                    <h2 class="text-2xl font-bold mb-4 text-gray-800 flex items-center">
-                        <i data-lucide="zap" class="w-6 h-6 mr-2 text-indigo-600"></i>
-                        ${ticker} GÜNCEL PİYASA HIZI
-                    </h2>
-
-                    <!-- Anlık Durum Özeti -->
-                    <div class="p-4 market-speed rounded-lg mb-6 border-l-4 border-white">
-                        <p class="font-bold mb-1 text-xl">Anlık Durum Özeti:</p>
-                    </div>
-
-                    <!-- Analiz Metni (Markdown'dan HTML'e çevrilmiş) -->
-                    <div class="prose max-w-none text-gray-700 leading-relaxed">
-                        ${markdownToHtml(speedText)}
-                    </div>
-
-                    ${sourcesHtml}
-                </div>
-            `;
-            if (typeof window.createIcons === 'function') {
-                window.createIcons();
-            }
-        };
-
-        // --- Analiz Sonucu Görüntüleme (Mevcut) ---
-        const displayAnalysisResult = (ticker, result) => { /* ... (Mevcut) ... */
-            const analysisText = result.text;
-            const sources = result.sources;
-            let finalRec = "TUT";
-            const recMatch = analysisText.match(/Nihai Yapay Zeka Tavsiyesi:\s*([^\n]+)/i);
-            if (recMatch && recMatch[1]) {
-                finalRec = recMatch[1].trim().toUpperCase().replace(/[^A-ZÇĞIİÖŞÜ\s]/g, ''); 
-            }
-            const formattedRec = formatRecommendation(finalRec.toLowerCase().replace(/\s/g, ''));
-            const recClassName = `recommendation-${formattedRec.class}`;
-            const recText = formattedRec.text;
-
-            let summaryContent = analysisText;
-            let predictionText = 'Tahmin verisi alınamadı.';
-
-            const predictionTitle = /### Kısa ve Orta Vadeli Fiyat Beklentisi/i;
-            const finalRecTitle = /### Nihai Yapay Zeka Tavsiyesi/i;
-
-            let predictionStartIndex = summaryContent.search(predictionTitle);
-            let finalRecStartIndex = summaryContent.search(finalRecTitle);
-
-            if (predictionStartIndex !== -1) {
-                let predictionEndIndex = finalRecStartIndex !== -1 && finalRecStartIndex > predictionStartIndex
-                    ? finalRecStartIndex
-                    : summaryContent.length;
-                
-                predictionText = summaryContent.substring(predictionStartIndex + predictionTitle.source.length - 1, predictionEndIndex).trim();
-                
-                summaryContent = summaryContent.substring(0, predictionStartIndex) + (finalRecStartIndex !== -1 ? summaryContent.substring(finalRecStartIndex) : '');
-            }
-
-            if (finalRecStartIndex !== -1) {
-                 summaryContent = summaryContent.substring(0, finalRecStartIndex);
-            }
-            
-            let sourcesHtml = generateSourcesHtml(sources);
-
-            document.getElementById('analysis-output').innerHTML = `
-                <div class="card-bg p-6 rounded-xl border border-gray-100 mb-6">
-                    <h2 class="text-2xl font-bold mb-4 text-gray-800 flex items-center">
-                        <i data-lucide="trending-up" class="w-6 h-6 mr-2 text-blue-500"></i>
-                        ${ticker} DERİNLEMESİNE ANALİZ RAPORU
-                    </h2>
-
-                    <!-- Genel Tavsiye -->
-                    <div class="p-4 rounded-xl mb-6 ${recClassName} flex justify-between items-center">
-                        <span class="text-xl font-bold">Yapay Zeka Nihai Tavsiye:</span>
-                        <span class="text-3xl font-extrabold tracking-wider">${recText}</span>
-                    </div>
-
-                    <!-- Kısa Vadeli Tahmin -->
-                    <div class="p-4 bg-yellow-50 text-yellow-800 rounded-lg mb-6 border-l-4 border-yellow-500">
-                        <p class="font-bold mb-1">Kısa ve Orta Vadeli Fiyat Beklentisi:</p>
-                        <div class="prose max-w-none text-gray-700 leading-relaxed">${markdownToHtml(predictionText)}</div>
-                    </div>
-
-                    <!-- Analiz Metni (Markdown'dan HTML'e çevrilmiş) -->
-                    <div class="prose max-w-none text-gray-700 leading-relaxed">
-                        ${markdownToHtml(summaryContent)}
-                    </div>
-
-                    ${sourcesHtml}
-                </div>
-            `;
-            if (typeof window.createIcons === 'function') {
-                window.createIcons();
-            }
-        };
-
-        // --- Öneri Sonucu Görüntüleme (Mevcut) ---
-        const displaySuggestionResult = (input, result) => { /* ... (Mevcut) ... */
-            const suggestionText = result.text;
-            const sources = result.sources;
-            
-            const criteriaList = [];
-            if (input.country) criteriaList.push(`Borsa / Ülke: **${input.country}**`);
-            if (input.sector) criteriaList.push(`Sektör: **${input.sector}**`);
-            if (input.criteria) criteriaList.push(`Strateji: **${input.criteria}**`);
-
-            const combinedCriteria = criteriaList.join(' | ');
-
-            const headerMatch = suggestionText.match(/### Önerilen Hisse ve Kriterler:\s*([^\n]+)/i);
-            const fullStockName = headerMatch && headerMatch[1] ? headerMatch[1].trim() : 'Bilinmeyen Hisse';
-            
-            const symbolMatch = fullStockName.match(/\(([^)]+)\)$/);
-            const stockSymbol = symbolMatch ? symbolMatch[1].trim() : fullStockName.split('(')[0].trim().toUpperCase();
-
-            let sourcesHtml = generateSourcesHtml(sources);
-            
-            const isHighPotential = input.criteria && input.criteria.toLowerCase().includes('yüksek potansiyelli');
-
-            document.getElementById('analysis-output').innerHTML = `
-                <div class="card-bg p-6 rounded-xl border border-gray-100 mb-6">
-                    <h2 class="text-2xl font-bold mb-4 text-gray-800 flex items-center">
-                        <i data-lucide="${isHighPotential ? 'rising' : 'lightbulb'}" class="w-6 h-6 mr-2 ${isHighPotential ? 'text-red-600' : 'text-green-500'}"></i>
-                        Yapay Zeka Hisse Önerisi Raporu
-                    </h2>
-
-                    <!-- Kriterler -->
-                    <div class="p-4 ${isHighPotential ? 'new-potential' : 'bg-indigo-50'} ${isHighPotential ? 'text-white' : 'text-indigo-800'} rounded-lg mb-6 border-l-4 border-white ${!isHighPotential ? 'border-indigo-500' : ''}">
-                        <p class="font-bold mb-1">Uygulanan Yatırım Kriterleri:</p>
-                        <p class="text-sm">${combinedCriteria}</p>
-                    </div>
-
-                    <!-- Analiz Metni (Markdown'dan HTML'e çevrilmiş) -->
-                    <div class="prose max-w-none text-gray-700 leading-relaxed">
-                        ${markdownToHtml(suggestionText)}
-                    </div>
-
-                    <div class="flex justify-end mt-4">
-                        <button onclick="addStockToTracking('${stockSymbol}')" class="text-sm bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out">
-                            ${stockSymbol} Takip Listesine Ekle
-                        </button>
-                    </div>
-
-                    ${sourcesHtml}
-                </div>
-            `;
-            if (typeof window.createIcons === 'function') {
-                window.createIcons();
-            }
-        };
-
-        const generateSourcesHtml = (sources) => { /* ... (Mevcut) ... */
-            let sourcesHtml = '';
-            if (sources.length > 0) {
-                const uniqueSources = Array.from(new Set(sources.map(s => s.uri)))
-                                           .map(uri => sources.find(s => s.uri === uri));
-
-                sourcesHtml = '<h3 class="font-bold text-lg mt-6 mb-2 text-gray-700 border-b pb-1">Kullanılan Kaynaklar</h3><ul class="list-disc pl-5 space-y-1 text-sm text-gray-600">';
-                uniqueSources.slice(0, 5).forEach(source => { 
-                    sourcesHtml += `<li><a href="${source.uri}" target="_blank" class="text-blue-600 hover:text-blue-800 break-all">${source.title || source.uri}</a></li>`;
-                });
-                sourcesHtml += '</ul>';
-            }
-            return sourcesHtml;
-        };
-
-
-        const formatRecommendation = (rec) => { /* ... (Mevcut) ... */
-            switch (rec) {
-                case 'al':
-                    return { text: 'AL', class: 'al' };
-                case 'sat':
-                    return { text: 'SAT', class: 'sat' };
-                case 'tut':
-                case 'nötr':
-                    return { text: 'TUT', class: 'tut' };
-                case 'hacimlial':
-                case 'güçlüal':
-                case 'guclual':
-                    return { text: 'GÜÇLÜ AL', class: 'hacim-al' };
-                case 'güçlüsat':
-                case 'guclusat':
-                    return { text: 'GÜÇLÜ SAT', class: 'guclu-sat' };
-                default:
-                    return { text: 'TUT', class: 'tut' };
-            }
-        };
-
-        const showMessage = (message, type = 'tut') => { /* ... (Mevcut) ... */
-            const toast = document.getElementById('toast-message');
-            toast.textContent = message;
-            toast.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 p-3 rounded-xl font-semibold z-50 transition-opacity duration-300 shadow-xl ${type === 'al' ? 'bg-emerald-500' : type === 'sat' ? 'bg-red-500' : 'bg-amber-500'} text-white`;
-            toast.classList.remove('opacity-0', 'hidden');
-            toast.classList.add('opacity-100');
-
-            setTimeout(() => {
-                toast.classList.remove('opacity-100');
-                toast.classList.add('opacity-0');
-                setTimeout(() => toast.classList.add('hidden'), 300);
-            }, 3000);
-        };
-
-        // Geliştirilmiş Markdown'dan HTML'e çevirici
-        const markdownToHtml = (markdown) => { /* ... (Mevcut) ... */
-            let html = markdown;
-            // Başlıklar (###)
-            html = html.replace(/^###\s*(.*)$/gm, '<h3>$1</h3>');
-            // Kalın metin (**)
-            html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-            // Listeler (*)
-            html = html.replace(/^\*\s*(.*)$/gm, '<li>$1</li>');
-            html = html.replace(/((<li>.*<\/li>\s*)+)/g, '<ul class="list-disc pl-5 mb-3 space-y-1 text-gray-700">$1</ul>');
-            // Paragraflar (Başlık ve liste olmayan satırlar)
-            html = html.split('\n').map(line => line.trim()).filter(line => line.length > 0 && !line.startsWith('<h') && !line.startsWith('<u') && !line.startsWith('<l')).map(line => `<p class="mb-3">${line}</p>`).join('');
-
-            return html;
-        };
-
-        // --- Gemini API Ortak Çağrı Fonksiyonu (Mevcut) ---
-        const apiKey = ""; 
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
-        const MAX_RETRIES = 5;
-
-        const callGemini = async (systemPrompt, userQuery) => { /* ... (Mevcut) ... */
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                tools: [{ "google_search": {} }],
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-            };
-
-            let lastError = null;
-
-            for (let i = 0; i < MAX_RETRIES; i++) {
-                try {
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(`API Hatası ${response.status}: ${errorData.error.message}`);
-                    }
-
-                    const result = await response.json();
-                    const candidate = result.candidates?.[0];
-
-                    if (candidate && candidate.content?.parts?.[0]?.text) {
-                        const text = candidate.content.parts[0].text;
-                        
-                        let sources = [];
-                        const groundingMetadata = candidate.groundingMetadata;
-
-                        if (groundingMetadata && groundingMetadata.groundingAttributions) {
-                            sources = groundingMetadata.groundingAttributions
-                                .map(attribution => ({
-                                    uri: attribution.web?.uri,
-                                    title: attribution.web?.title,
-                                }))
-                                .filter(source => source.uri);
-                        }
-                        return { text, sources }; 
-                    }
-                    throw new Error("Gemini API'den geçerli yanıt alınamadı. (Boş İçerik)");
-
-                } catch (error) {
-                    lastError = error;
-                    console.warn(`API denemesi ${i + 1} başarısız:`, error.message);
-                    if (i < MAX_RETRIES - 1) {
-                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    }
-                }
-            }
-            throw new Error(`Maksimum deneme sayısına ulaşıldı. Analiz yapılamadı: ${lastError.message || "Bilinmeyen bir iletişim hatası."}`);
-        };
-
-
-        // --- ANALİZ MODU (Mevcut) ---
-        const analyzeStock = (ticker) => {
-            const systemPrompt = `Sen, küresel finans piyasalarında derinlemesine analizler yapan bir Yapay Zeka Baş Analistisin. Görevin, verilen hisse senedi hakkında (örn: ${ticker}) en güncel piyasa haberlerini, ünlü yorumcuların, büyük bankaların ve önemli yatırımcıların analizlerini Google Search kullanarak derinlemesine araştırmaktır. Cevabını aşağıdaki 5 bölümlü, detaylı Markdown formatında, Türkçe olarak KESİNLİKLE sun:
-
-1. ### Detaylı Piyasa ve Haber Analizi:
-   - Şirketi etkileyen son 48 saatteki en önemli gelişmeleri ve haber akışını (pozitif/negatif etki analizi ile) özetle. Bu, sadece bir özet değil, piyasanın bu haberlere verdiği tepkiyi içeren bir analiz olmalıdır.
-
-2. ### Temel Oran Karşılaştırması ve Değerleme:
-   - Hisse senedinin temel finansal oranlarını (F/K, PD/DD, Borç/Özkaynak, Temettü Verimi) bul ve bu oranları, şirketin içinde bulunduğu **sektör ortalaması veya ana rakiplerinin oranlarıyla karşılaştır**. 
-   - Karşılaştırmaya dayanarak hissenin **ucuz mu, pahalı mı, yoksa adil mi** olduğunu net bir şekilde belirt.
-
-3. ### Uzmanlar, Bankalar ve Ünlü Yatırımcı Görüşleri:
-   - Büyük bankaların (J.P. Morgan, Goldman Sachs, vb.), yerel yatırım kuruluşlarının ve ünlü yatırımcı/yorumcuların son 1 haftalık tavsiyelerini ve fiyat hedeflerini derinlemesine incele. Lütfen, ulaştığın en az 5 farklı ve ilgili görüşü listele.
-   - Her bir görüşü aşağıdaki NET FORMATTA Markdown listesi (*) olarak özetle:
-     * **[Kaynak Adı/Banka Adı]**: Tavsiye **[Al/Sat/Tut]** (Hedef: [Fiyat/Durum]) - [Analizin Kısa Özeti/Yorumu].
-
-4. ### Kısa ve Orta Vadeli Fiyat Beklentisi:
-   - Kısa vadeli (1-3 gün) ve orta vadeli (1-2 hafta) teknik ve temel sinyallerini değerlendirerek, fiyatın yönelim ihtimalini analiz et ve net bir cümle ile belirt. Cevap 3-4 cümleyi geçmemelidir.
-
-5. ### Nihai Yapay Zeka Tavsiyesi:
-   - Tüm bu verileri sentezleyerek verdiğin nihai ve kesin tavsiye (Sadece: Hacimli Al, Al, Tut, Sat veya Güçlü Sat şeklinde tek kelime olmalıdır).`;
-            
-            const userQuery = `${ticker} hisse senedi için Temel Oran karşılaştırmalı, kapsamlı bir piyasa analizi yap ve net bir al/sat tavsiyesi ver.`;
-            return callGemini(systemPrompt, userQuery);
-        };
-
-        // --- GÜNLÜK ANALİZ MODU (Mevcut) ---
-        const getDailyAnalysis = (ticker) => {
-            const systemPrompt = `Sen bir anlık piyasa dedikodusu ve yatırımcı duyarlılığı analistisin. Görevin, verilen hisse senedi hakkında (Örn: ${ticker}) bugün (son 24 saat) çıkan tüm önemli haberleri, sosyal medyada (Twitter, forumlar) ve finansal yayınlardaki en sıcak yorumları, fısıltıları ve yatırımcı psikolojisini Google Search kullanarak hızlıca toplamaktır. Cevabını aşağıdaki Markdown formatında, Türkçe olarak KESİNLİKLE sun:
-
-1. ### Bugünün En Sıcak Haber Başlıkları:
-   - Hissenin anlık momentumunu etkileyen en önemli 3-4 güncel haber başlığını listele.
-2. ### Yatırımcı Duyarlılığı ve Yorumlar:
-   - Sosyal medyada ve forumlardaki genel hava (Fiyat beklentisi, korku, coşku) nedir? Önemli bir analistin veya yorumcunun o gün yaptığı etkili bir yorumunu (varsa) özetle.
-3. ### Gün İçi Teknik Sinyal Özeti:
-   - Fiyatın gün içinde teknik olarak direnç/destek seviyelerine göre nasıl hareket ettiğini ve kısa vadede (gün sonu) hangi yöne eğilimli olduğunu net bir cümle ile belirt. (Örn: Kısa pozisyon açmaya uygun görünüyor).
-4. ### Günlük Hızlı Tavsiye:
-   - Hissedeki anlık momentum ve piyasa dedikodularına dayanarak hızlı bir Al, Sat veya Tut tavsiyesi ver. (Sadece: AL, SAT, TUT şeklinde tek kelime olmalıdır).`;
-
-            const userQuery = `${ticker} hisse senedi için bugünün (güncel) en önemli haber, yorum ve kısa vadeli teknik sinyal analizini yap.`;
-            return callGemini(systemPrompt, userQuery);
-        };
-        
-        // --- ÖNERİ MODU (Mevcut) ---
-        const suggestStock = (country, sector, criteria) => { /* ... (Mevcut) ... */
-            // Kriterleri birleştir
-            const fullCriteria = `YATIRIM KRİTERLERİ: Borsa/Ülke: ${country || 'Belirtilmedi'}, Sektör: ${sector || 'Belirtilmedi'}, Strateji: ${criteria || 'Belirtilmedi'}.`;
-
-            const systemPrompt = `Sen bir Yapay Zeka Yatırım Stratejistisin. Görevin, kullanıcının belirlediği güncel piyasa kriterlerine uygun, güncel piyasa verilerine dayanarak potansiyel bir hisse senedi önermektir. Kriterler: ${fullCriteria}. Eğer strateji 'Yeni Piyasaya Giren ve Yüksek Potansiyelli' ise, özellikle son halka arzları veya niş pazarlarda hızla büyüyen şirketleri hedeflemeye odaklan. Önerdiğin hisse senedi hakkında kapsamlı bir rapor hazırla. Raporun aşağıdaki 5 bölümlü Markdown formatı ile, Türkçe olarak KESİNLİKLE sunulmalıdır:
-            
-1. ### Önerilen Hisse ve Kriterler: [Önerilen Şirket Adı ve Sembolü (Örn: Coca Cola (NASDAQ:KO) veya (BIST:THYAO)). Lütfen Parantez içinde Borsa Sembolünü (Örn: NASDAQ:KO, BIST:THYAO) belirt.]
-2. ### Öneri Gerekçesi (Neden Bu Hisse?):
-   - Neden bu hissenin kullanıcının kriterlerine uygun olduğunu ve belirtilen Sektör/Borsa bağlamında neden öne çıktığını açıkla. Eğer 'Yeni Piyasaya Giren ve Yüksek Potansiyelli' isteniyorsa, bu potansiyelin temel dayanaklarını ve yüksek risk-ödül oranını belirt.
-3. ### Güncel Pazar Konumu ve Haberler:
-   - Şirketin son piyasa performansı ve onu etkileyen en önemli 3 güncel haberi özetle.
-4. ### Riskler ve Dikkat Edilmesi Gerekenler:
-   - Yatırımcının göz önünde bulundurması gereken en önemli risk faktörlerini listele. Özellikle "Yeni Piyasaya Giren" hisseler için yüksek volatilite, düşük likidite ve uzun süreli zararlar gibi riskleri vurgula.
-5. ### Nihai Tavsiye Özeti:
-   - Öneriyi özetleyen net bir cümle, örneğin: Bu hisseyi portföyünüze ekleyin veya: Uzun vadeli tutulması önerilir.`;
-
-            const userQuery = `${ticker} hisse senedi için ${fullCriteria} kriterlerine uygun, optimize edilmiş, sanal bir portföy dağılımı öner ve detaylı raporunu hazırla.`;
-            return callGemini(systemPrompt, userQuery);
-        };
-
-        // --- PİYASA HIZI MODU (Mevcut) ---
-        const getMarketSpeed = (ticker) => { /* ... (Mevcut) ... */
-            const systemPrompt = `Sen bir hızlı piyasa veri analistisin. Görevin, verilen hisse senedi hakkında (Örn: ${ticker}) en güncel fiyat, son 24 saatteki değişim yüzdesi, piyasa değeri ve varsa grafik görüntüsü (sadece Google Search ile bulunabilen görselin URL'si veya basit bir grafik özet bilgisi) gibi temel finansal verileri Google Search kullanarak hızlıca toplamaktır. Cevabını aşağıdaki Markdown formatında, Türkçe olarak KESİNLİKLE sun:
-
-1. ### Anlık Fiyat ve Değişim:
-   - Hisse adı ve güncel fiyatı, son 24 saatlik yüzdelik değişimi. (Örn: XYZ hissesi 125,50 TL, %2.3 Yükseliş)
-2. ### Temel Piyasa Verileri:
-   - Piyasa Değeri, 52 Haftalık En Yüksek/Düşük, Hacim gibi en önemli temel verileri liste halinde özetle.
-3. ### Kısa Özet ve Sinyal:
-   - Mevcut fiyat hareketine dayanarak (Örn: Güçlü Alım Bölgesinde, Konsolidasyon Devam Ediyor gibi) kısa bir özet sinyal ver.`;
-
-            const userQuery = `${ticker} hisse senedinin güncel fiyatı, piyasa değeri ve temel performans verileri nelerdir?`;
-            return callGemini(systemPrompt, userQuery);
-        };
-
-        // --- DUYARLILIK MODU (Mevcut) ---
-        const getSentimentScore = () => { /* ... (Mevcut) ... */
-             const systemPrompt = `Sen bir Küresel Piyasa Duyarlılık Analistisin. Görevin, son 24-48 saatteki küresel ve yerel finansal haber başlıklarını, ekonomik verileri ve piyasa yorumlarını Google Search kullanarak analiz etmek ve piyasanın genel psikolojisini ölçmektir. Cevabını aşağıdaki Markdown formatında, Türkçe olarak KESİNLİKLE sun:
-
-1. ### Duyarlılık Durumu:
-   - Piyasanın genel eğilimi (Örn: Aşırı Açgözlülük, Korku, Nötr) hakkında kısa bir analiz yap. Bu analiz, özellikle Fed kararları, enflasyon, jeopolitik olaylar gibi küresel trendlere odaklanmalıdır.
-2. ### Skoru: [1 ile 100 arasında net bir sayısal skor]
-   - Bu skor, piyasa risk iştahını temsil eder: 1-25 (Aşırı Korku), 26-45 (Korku), 46-55 (Nötr), 56-75 (Açgözlülük), 76-100 (Aşırı Açgözlülük).
-3. ### Güncel Etkileyen Faktörler:
-   - Puanı etkileyen en önemli 3-4 küresel faktörü (haber, ekonomik veri vb.) özetle.`;
-
-            const userQuery = `Küresel ve yerel finans piyasalarının genel duyarlılık skoru ve bu skoru etkileyen faktörler hakkında bir rapor hazırla.`;
-            return callGemini(systemPrompt, userQuery);
-        };
-        
-        // --- PORTFÖY MODU (Mevcut) ---
-        const simulatePortfolio = (country, sector, criteria) => { /* ... (Mevcut) ... */
-            const fullCriteria = `YATIRIM KRİTERLERİ: Borsa/Ülke: ${country || 'Belirtilmedi'}, Sektör: ${sector || 'Belirtilmedi'}, Strateji: ${criteria || 'Belirtilmedi'}.`;
-
-            const systemPrompt = `Sen bir Yatırım Portföyü Stratejistisin. Görevin, kullanıcının belirlediği kriterlere (Borsa/Ülke, Sektör, Strateji) uygun, riski dağıtılmış ve optimize edilmiş, sanal bir portföy simülasyonu oluşturmaktır. Cevabını aşağıdaki Markdown formatında, Türkçe olarak KESİNLİKLE sun:
-
-1. ### Portföy Stratejisi ve Analiz Özeti:
-   - Oluşturulan portföyün risk profili (Düşük, Orta, Yüksek) ve bu stratejinin piyasa koşullarına uygunluğu hakkında 3-4 cümlelik özet. Kriterler: ${fullCriteria}.
-
-2. ### Önerilen Sanal Portföy Dağılımı:
-   - Belirlenen kriterlere uygun en az 4 farklı hisse senedi öner ve her birine ayrılması gereken önerilen fon yüzdesini (ağırlıklandırma) belirt.
-   - Her hisseyi aşağıdaki NET FORMATTA Markdown listesi (*) olarak özetle:
-     * **[Şirket Adı/Sembol]** ([Borsa]): Önerilen Ağırlık **[Yüzde %]** - [Kısa Gerekçe (Neden bu portföyde olmalı)].
-
-3. ### Risk ve Portföy Dengesi:
-   - Portföyün genel riskleri (Sektörel, Coğrafi, Bireysel) ve bu risklerin nasıl dağıtıldığı hakkında yorum yap. (Örn: Sektörel risk yüksek, ancak farklı sektör hisseleri ile dengelenmiştir.)
-
-4. ### Simülasyon Nihai Tavsiyesi:
-   - Portföy stratejisini özetleyen net bir cümle (Örn: Bu portföy, orta vadeli sermaye takdirine uygundur).`;
-
-            const userQuery = `${ticker} hisse senedi için ${fullCriteria} kriterlerine uygun, optimize edilmiş, sanal bir portföy dağılımı öner ve detaylı raporunu hazırla.`;
-            return callGemini(systemPrompt, userQuery);
-        };
-        
-        // --- RİSK MODU (Mevcut) ---
-        const getRiskScore = (ticker) => {
-            const systemPrompt = `Sen bir anlık piyasa risk uzmanısın. Görevin, verilen hisse senedi hakkında (Örn: ${ticker}) en güncel **volatilite verilerini, haber akışının ciddiyetini ve likidite durumunu** Google Search kullanarak analiz ederek hissenin taşıdığı anlık riski skorlamaktır. Skoru **1 ile 10 arasında DAĞIT**. Skor 1-4 Düşük Risk, 5-6 Orta Risk, 7-10 Yüksek Risk anlamına gelir. Verdiğin sayısal skor ile metinsel değerlendirmen KESİNLİKLE UYUMLU ve GERÇEKÇİ olmalıdır. Cevabını aşağıdaki KESİNLİKLE UYMAN GEREKEN formatta, Türkçe olarak sun:
-
-Risk Durumu: [Düşük Risk | Orta Risk | Yüksek Risk]
-Risk Puanı: [1 ile 10 arasında net bir sayısal skor]
----
-### Değerlendirme:
-   - Skora dayanarak hissenin anlık risk seviyesini (Düşük Risk, Orta Risk, Yüksek Risk) ve bunun yatırımcı için ne anlama geldiğini açıkla. Değerlendirme metni, yukarıdaki sayısal skor ile UYUMLU olmalıdır (Örn: Eğer skor 3 ise metin "Düşük Riskli" olarak başlamalıdır).
-### Riski Yükselten Faktörler:
-- Hissenin anlık riskini artıran en önemli 3-4 faktörü (yüksek volatilite, olumsuz haber akışı, likidite düşüşü vb.) liste halinde özetle. **Her maddeyi detaylı bir cümle ile açıkla.**
-### Riski Düşüren Faktörler (Güvenlik Payları):
-- Hissenin riskini dengeleyen 2-3 temel güvenlik payını veya pozitif etkeni (sağlam bilanço, güçlü destek seviyesi vb.) liste halinde özetle. **Her maddeyi detaylı bir cümle ile açıkla.**`;
-
-            const userQuery = `${ticker} hisse senedi için anlık risk skoru (1-10) ve bu skoru etkileyen faktörler hakkında bir rapor hazırla.`;
-            return callGemini(systemPrompt, userQuery);
-        };
-
-
-        // Uygulama başlatma
-        window.onload = initFirebase;
-    </script>
 </head>
 <body class="p-4 md:p-8 min-h-screen">
 
-    <!-- Toast Mesajı -->
-    <div id="toast-message" class="fixed hidden opacity-0 transition-opacity duration-300"></div>
+    <!-- Bildirim Mesajı -->
+    <div id="toast-message" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 hidden z-50 px-6 py-3 rounded-lg shadow-xl text-white font-semibold transition-opacity duration-300 text-center w-11/12 md:w-auto"></div>
 
     <div class="max-w-4xl mx-auto">
-        <header class="text-center mb-10">
-            <h1 class="text-4xl font-extrabold text-gray-900 flex items-center justify-center">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-gray-900 flex items-center justify-center mb-2">
                 <i data-lucide="cpu" class="w-8 h-8 mr-3 text-blue-600"></i>
-                AI Finans Asistanı
+                AI Finans Asistanı <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full ml-2 align-top">API AKTİF</span>
             </h1>
-            <p id="user-info" class="mt-2 text-sm text-gray-500">
-                Kullanıcı ID: <span id="user-id-display" class="font-mono text-xs bg-gray-100 p-1 rounded-md">Yükleniyor...</span>
-            </p>
-            <p class="mt-2 text-md text-gray-600 font-medium">Uzman ve Kurum Raporlarına dayalı derinlemesine hisse senedi analizleri ve önerileri alın.</p>
+            <p class="text-gray-500 text-sm">Kişisel Borsa ve Risk Analiz Asistanınız</p>
         </header>
 
-        <!-- Piyasa Duyarlılık Butonu -->
-        <div class="card-bg p-4 rounded-xl border border-gray-100 mb-8 flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-3 justify-center">
-            <button onclick="handleSentimentClick()" class="flex items-center justify-center bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 ease-in-out text-base flex-1">
+        <!-- 1. Piyasa Duyarlılık Butonu -->
+        <div class="card-bg p-4 rounded-xl border border-gray-100 mb-6">
+            <button onclick="handleAnalysisFlow(null, 'SENTIMENT')" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow transition flex items-center justify-center">
                 <i data-lucide="activity" class="w-5 h-5 mr-2"></i> KÜRESEL PİYASA DUYARLILIĞINI ÖLÇ
             </button>
         </div>
 
-
-        <!-- Analiz Giriş Alanı (GÜNCEL HIZ VE RİSK BUTONLARI) -->
-        <div id="analysis-input-container" class="card-bg p-6 rounded-xl border border-gray-100 mb-8">
-            <h2 class="text-xl font-bold text-gray-800 mb-4">Mevcut Hisse İşlemleri</h2>
-            <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
-                <input type="text" id="analysis-input" placeholder="Hisse adı veya sembolü (örn: THYAO, MSFT)" class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-inner">
-                
-                <div class="flex flex-wrap space-x-2 w-full sm:w-auto">
-                    <!-- Günlük Analiz Butonu -->
-                    <button onclick="handleDailyClick(null)" class="flex items-center justify-center daily-analysis hover:bg-teal-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 ease-in-out text-sm flex-1 mb-2 sm:mb-0">
-                        <i data-lucide="calendar-check" class="w-5 h-5 mr-2"></i> Günlük Analiz
-                    </button>
-                    <!-- Derin Analiz Butonu -->
-                    <button onclick="analyzeAndDisplay(null)" class="flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 ease-in-out text-sm flex-1 mb-2 sm:mb-0">
-                        <i data-lucide="search" class="w-5 h-5 mr-2"></i> Derin Analiz
-                    </button>
-                    
-                    <!-- Güncel Piyasa Hızı Butonu -->
-                    <button onclick="handleSpeedClick(null)" class="flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 ease-in-out text-sm flex-1">
-                        <i data-lucide="zap" class="w-5 h-5 mr-2"></i> Hız Bilgisi
-                    </button>
-                </div>
+        <!-- 2. Hızlı Analiz Alanı -->
+        <div id="analysis-input-container" class="card-bg p-6 rounded-xl border border-gray-100 mb-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Hızlı Hisse Analizi</h2>
+            <div class="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-3">
+                <input type="text" id="analysis-input" placeholder="Hisse Sembolü (Örn: THYAO, ASELS)" class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
             </div>
-            
-            <!-- YENİ: RİSK SKORLAYICI DÜĞMESİ -->
-            <div class="mt-4 pt-2 border-t border-gray-100">
-                <button onclick="handleRiskClick()" class="flex items-center justify-center w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 ease-in-out text-base">
-                    <i data-lucide="shield" class="w-5 h-5 mr-2"></i> ANLIK RİSK SKORLAYICIYI ÇALIŞTIR (1-10)
-                </button>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+                <button onclick="handleBtnClick('DAILY')" class="bg-teal-600 hover:bg-teal-700 text-white py-2 px-4 rounded-lg font-medium text-sm flex items-center justify-center"><i data-lucide="calendar-check" class="w-4 h-4 mr-1"></i> Günlük</button>
+                <button onclick="handleBtnClick('ANALYSIS')" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium text-sm flex items-center justify-center"><i data-lucide="search" class="w-4 h-4 mr-1"></i> Derin</button>
+                <button onclick="handleBtnClick('SPEED')" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg font-medium text-sm flex items-center justify-center"><i data-lucide="zap" class="w-4 h-4 mr-1"></i> Hız</button>
+                <button onclick="handleBtnClick('RISK')" class="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg font-medium text-sm flex items-center justify-center"><i data-lucide="shield" class="w-4 h-4 mr-1"></i> Risk</button>
             </div>
         </div>
 
-        <!-- Öneri Giriş Alanı (Mevcut) -->
-        <div id="suggestion-input-container" class="card-bg p-6 rounded-xl border border-gray-100 mb-8">
+        <!-- ORTA BÖLÜM: Sonuçlar -->
+        <div id="analysis-loading" class="hidden text-center p-10">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mx-auto mb-4"></div>
+            <p class="text-blue-800 font-semibold text-lg animate-pulse">Yapay Zeka verileri analiz ediyor...</p>
+        </div>
+
+        <!-- SONUÇ ALANI -->
+        <div id="analysis-output" class="mb-8"></div>
+
+        <!-- 3. Takip Listesi -->
+        <div class="card-bg p-6 rounded-xl border border-gray-100 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i data-lucide="clipboard-copy" class="w-5 h-5 mr-2 text-green-600"></i>
+                    Akıllı Takip Listesi
+                </h2>
+            </div>
+            
+            <div class="flex mb-4 space-x-2">
+                <input type="text" id="new-stock-symbol" placeholder="Sembol (Örn: THYAO, MSFT)" class="flex-grow p-2 border border-gray-300 rounded-lg">
+                <button id="add-stock-btn" onclick="handleAddStockClick()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span id="add-btn-text">Ekle</span>
+                </button>
+            </div>
+
+            <div id="tracked-stocks-container" class="space-y-4">
+                <p class="text-gray-500 italic text-center py-4">Listeniz boş.</p>
+            </div>
+        </div>
+
+        <!-- 4. Öneri ve Simülasyon -->
+        <div id="suggestion-input-container" class="card-bg p-6 rounded-xl border border-gray-100 mb-6 opacity-90 hover:opacity-100 transition-opacity">
             <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
                 <i data-lucide="lightbulb" class="w-5 h-5 mr-2 text-yellow-500"></i>
-                Yapay Zeka Hisse Önerisi & Simülatörü
+                Yapay Zeka ile Keşfet
             </h2>
-            <div class="flex flex-col space-y-3">
-                <input type="text" id="suggestion-country" placeholder="1. Borsa / Ülke (Örn: BIST, NASDAQ, Almanya)" class="p-3 border border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500 shadow-inner">
-                <input type="text" id="suggestion-sector" placeholder="2. Sektör (Örn: Yenilenebilir Enerji, Bilişim, Bankacılık)" class="p-3 border border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500 shadow-inner">
-                <input type="text" id="suggestion-criteria" placeholder="3. Yatırım Kriteri (Örn: Düşük riskli, Yüksek temettü, Agresif Büyüme)" class="p-3 border border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500 shadow-inner">
+            <div class="space-y-3">
+                <input type="text" id="suggestion-country" placeholder="1. Borsa / Ülke (Örn: BIST, NASDAQ)" class="w-full p-3 border border-gray-300 rounded-lg">
+                <input type="text" id="suggestion-sector" placeholder="2. Sektör (Örn: Enerji, Teknoloji)" class="w-full p-3 border border-gray-300 rounded-lg">
+                <input type="text" id="suggestion-criteria" placeholder="3. Kriter (Örn: Düşük riskli, Temettü)" class="w-full p-3 border border-gray-300 rounded-lg">
                 
-                <div class="flex flex-col space-y-2 pt-2 md:flex-row md:space-x-2 md:space-y-0">
-                    <button onclick="handleSuggestClick()" class="flex items-center justify-center flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 ease-in-out text-sm">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                    <button onclick="handleSuggestClick()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
                         <i data-lucide="cpu" class="w-5 h-5 mr-2"></i> Kriterlere Göre Öner
                     </button>
-                    <!-- YÜKSEK POTANSİYELLİ HİSSE DÜĞMESİ -->
-                    <button onclick="handleNewPotentialClick()" class="flex items-center justify-center flex-1 new-potential hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 ease-in-out text-sm">
-                        <i data-lucide="rising" class="w-5 h-5 mr-2"></i> Yüksek Potansiyelli Hisse Öner
+                    <button onclick="handleNewPotentialClick()" class="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
+                        <i data-lucide="trending-up" class="w-5 h-5 mr-2"></i> Yüksek Potansiyel
                     </button>
                 </div>
-                
-                <!-- PORTFÖY SİMÜLATÖRÜ BUTONU -->
-                <button onclick="handlePortfolioClick()" class="flex items-center justify-center w-full bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 ease-in-out text-sm mt-3">
-                    <i data-lucide="pie-chart" class="w-5 h-5 mr-2"></i> Sanal Portföy Oluştur (Simülatör)
+                <button onclick="handlePortfolioClick()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center mt-2">
+                    <i data-lucide="pie-chart" class="w-5 h-5 mr-2"></i> Sanal Portföy Oluştur
                 </button>
             </div>
         </div>
-
-        <!-- Yükleniyor Göstergesi -->
-        <div id="analysis-loading" class="hidden text-center p-8 bg-blue-50 rounded-xl border border-blue-200 mb-8">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p class="text-blue-700 font-medium">Uzman raporları, banka analizleri ve güncel piyasa verileri detaylı olarak araştırılıyor...</p>
-        </div>
-
-        <!-- Analiz/Öneri Sonucu Alanı -->
-        <div id="analysis-output" class="mb-8">
-            <div class="text-center p-8 text-gray-500 italic bg-gray-50 rounded-xl">
-                Bir hisse senedini analiz edin veya yeni yatırım fikirleri için Yapay Zeka'dan öneri alın.
-            </div>
-        </div>
-
-        <!-- Takip Listesi Alanı -->
-        <div class="card-bg p-6 rounded-xl border border-gray-100">
-            <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                <i data-lucide="clipboard-copy" class="w-5 h-5 mr-2 text-green-500"></i>
-                Takip Edilen Hisseler
-            </h2>
-            
-            <!-- Yeni Hisse Ekleme Formu (Borsa Alanı Kaldırıldı) -->
-            <form id="tracking-form" onsubmit="handleTrackingFormSubmit(event)" class="flex flex-col sm:flex-row mb-4 space-y-2 sm:space-y-0 sm:space-x-3">
-                <input type="text" id="new-stock-symbol" placeholder="Hisse Sembolü (Örn: THYAO, MSFT)" required class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500">
-                <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 ease-in-out text-sm">
-                    Ekle (Borsayı AI Bulur)
-                </button>
-            </form>
-
-            <ul id="tracked-stocks-list" class="space-y-3">
-                <li class="p-3 text-center text-gray-500 italic">Hisseler yükleniyor...</li>
-            </ul>
-        </div>
+        
+        <footer class="text-center text-gray-400 text-xs mt-10 mb-4">
+            AI Finans Asistanı V02.5 | Direkt API Modu
+        </footer>
     </div>
+
+    <!-- JAVASCRIPT MANTIĞI -->
+    <script>
+        // --- API ANAHTARI ENTEGRASYONU (Sizin Verdiğiniz Anahtar) ---
+        const apiKey = "AIzaSyB7TX659GnOraoXCHLYToFWrAbOu0wFjOI"; 
+        
+        const MODEL_NAME = 'gemini-2.5-flash-preview-09-2025';
+        const STORAGE_KEY = 'ai_finans_stocks_v2';
+
+        // --- YARDIMCI FONKSİYONLAR ---
+        
+        function loadIcons() {
+            if(typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function showMessage(msg, type = 'info') {
+            const toast = document.getElementById('toast-message');
+            toast.textContent = msg;
+            toast.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-xl text-white font-semibold transition-opacity duration-300 ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        function markdownToHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold mt-4 mb-2">$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mt-6 mb-3">$1</h2>')
+                .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+                .replace(/^\* (.*$)/gim, '<li class="ml-4">$1</li>')
+                .replace(/\n/gim, '<br>');
+        }
+
+        // --- TAKİP LİSTESİ MANTIĞI ---
+
+        function getStocks() {
+            const stocks = localStorage.getItem(STORAGE_KEY);
+            return stocks ? JSON.parse(stocks) : [];
+        }
+
+        async function determineMarketAI(symbol) {
+            const prompt = `Sen bir borsa uzmanısın. "${symbol}" hisse senedi hangi borsada işlem görüyor? (Örn: BIST, NASDAQ, NYSE, LSE, Kripto). Cevap olarak SADECE borsa kısaltmasını yaz. Başka hiçbir kelime kullanma.`;
+            
+            try {
+                const result = await callGeminiAPI(prompt);
+                let market = result.trim().toUpperCase().replace(/[^A-Z]/g, '');
+                if (market.length < 2 || market.includes('BILMIYOR')) return 'DIGER';
+                return market;
+            } catch (error) {
+                console.error("Borsa bulunamadı:", error);
+                return 'BIST'; // Hata durumunda varsayılan
+            }
+        }
+
+        async function handleAddStockClick() {
+            const input = document.getElementById('new-stock-symbol');
+            const symbol = input.value.trim().toUpperCase();
+            const btn = document.getElementById('add-stock-btn');
+            const btnText = document.getElementById('add-btn-text');
+
+            if (!symbol) {
+                showMessage("Lütfen bir sembol girin.", 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            btnText.textContent = 'Borsa Bulunuyor...';
+
+            try {
+                const stocks = getStocks();
+                if (stocks.some(s => s.symbol === symbol)) {
+                    showMessage(`${symbol} zaten listenizde.`, 'error');
+                    return;
+                }
+
+                const marketName = await determineMarketAI(symbol);
+
+                stocks.push({ symbol: symbol, market: marketName });
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks));
+                
+                renderStocks();
+                showMessage(`${symbol} (${marketName}) eklendi.`);
+                input.value = '';
+
+            } catch (error) {
+                showMessage("Ekleme sırasında hata oluştu: " + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Ekle';
+            }
+        }
+
+        function removeStock(symbol) {
+            let stocks = getStocks();
+            stocks = stocks.filter(s => s.symbol !== symbol);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks));
+            renderStocks();
+            showMessage(`${symbol} silindi.`, 'error');
+        }
+
+        function renderStocks() {
+            const container = document.getElementById('tracked-stocks-container');
+            const stocks = getStocks();
+            container.innerHTML = '';
+
+            if (stocks.length === 0) {
+                container.innerHTML = '<li class="text-gray-500 italic text-center py-4">Listeniz boş.</li>';
+                return;
+            }
+
+            const grouped = stocks.reduce((acc, stock) => {
+                const m = stock.market || 'DIGER';
+                if (!acc[m]) acc[m] = [];
+                acc[m].push(stock);
+                return acc;
+            }, {});
+
+            Object.keys(grouped).sort().forEach(market => {
+                const header = document.createElement('h3');
+                header.className = "text-sm font-bold text-gray-500 uppercase tracking-wider mt-4 mb-2 border-b pb-1 border-gray-200";
+                header.textContent = market;
+                container.appendChild(header);
+
+                const ul = document.createElement('ul');
+                ul.className = "space-y-2";
+                
+                grouped[market].forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'flex justify-between items-center p-3 bg-white border border-gray-200 rounded-lg shadow-sm transition hover:shadow-md';
+                    li.innerHTML = `
+                        <span class="font-bold text-gray-800 text-lg">${item.symbol}</span>
+                        <div class="flex space-x-1">
+                            <button onclick="handleAnalysisFlow('${item.symbol}', 'DAILY')" class="bg-teal-100 text-teal-700 hover:bg-teal-200 p-2 rounded-md text-xs font-bold">GÜNLÜK</button>
+                            <button onclick="handleAnalysisFlow('${item.symbol}', 'RISK')" class="bg-red-100 text-red-700 hover:bg-red-200 p-2 rounded-md text-xs font-bold">RİSK</button>
+                            <button onclick="handleAnalysisFlow('${item.symbol}', 'SPEED')" class="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 p-2 rounded-md text-xs font-bold">HIZ</button>
+                            <button onclick="removeStock('${item.symbol}')" class="text-gray-400 hover:text-red-500 p-2"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                        </div>
+                    `;
+                    ul.appendChild(li);
+                });
+                container.appendChild(ul);
+            });
+            loadIcons();
+        }
+
+        // --- API VE ANALİZ MANTIĞI (PROXY KALDIRILDI - DİREKT BAĞLANTI) ---
+
+        async function callGeminiAPI(prompt) {
+            // Doğrudan Google API'si (Proxy yok)
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+            
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                tools: [{ "google_search": {} }] // Google Search aracı aktif
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const errorDetails = await response.json();
+                    throw new Error(`API Hatası: ${errorDetails.error?.message || response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.candidates || data.candidates.length === 0) {
+                     throw new Error("Yapay Zeka cevap veremedi.");
+                }
+
+                return data.candidates[0].content.parts[0].text;
+            } catch (error) {
+                console.error("API İsteği Hatası:", error);
+                throw error;
+            }
+        }
+
+        function handleBtnClick(mode) {
+            const input = document.getElementById('analysis-input');
+            const symbol = input.value.trim().toUpperCase();
+            if (!symbol) {
+                showMessage("Lütfen bir hisse sembolü girin.", 'error');
+                return;
+            }
+            handleAnalysisFlow(symbol, mode);
+        }
+
+        function handleSuggestClick() {
+            const country = document.getElementById('suggestion-country').value;
+            const sector = document.getElementById('suggestion-sector').value;
+            const criteria = document.getElementById('suggestion-criteria').value;
+            handleAnalysisFlow({ country, sector, criteria }, 'SUGGESTION');
+        }
+        
+        function handleNewPotentialClick() {
+            handleAnalysisFlow({ criteria: "Yüksek potansiyelli, yeni fırsatlar" }, 'SUGGESTION');
+        }
+        
+        function handlePortfolioClick() {
+             const country = document.getElementById('suggestion-country').value;
+             handleAnalysisFlow({ country }, 'PORTFOLIO');
+        }
+
+        // --- ANA ANALİZ AKIŞI ---
+        async function handleAnalysisFlow(input, mode) {
+            document.getElementById('analysis-loading').classList.remove('hidden');
+            document.getElementById('analysis-output').innerHTML = '';
+            
+            let prompt = "";
+            if (mode === 'RISK') {
+                prompt = `Sen bir finansal risk uzmanısın. Görevin: ${input} hissesi için güncel haberleri, volatiliteyi ve teknik verileri tara. 
+                
+                Cevabını ŞU KESİN FORMATTA VER (Başka giriş cümlesi yazma!):
+                
+                Risk Puanı: [1-10 arası bir sayı]
+                Risk Durumu: [Sadece: Düşük Risk | Orta Risk | Yüksek Risk]
+                
+                ### Detaylı Risk Analizi
+                Buraya hissenin risklerini artıran ve azaltan faktörleri, teknik göstergeleri (RSI, MACD vb.) ve güncel haberlerin etkisini detaylı bir paragraf olarak yaz.`;
+            } else if (mode === 'DAILY') {
+                prompt = `${input} hissesi için BUGÜNE özel günlük analiz yap. Anlık momentum, gün içi destek/direnç ve son dakika haberlerini özetle.`;
+            } else if (mode === 'SPEED') {
+                prompt = `${input} hissesinin anlık fiyatı, günlük değişimi, hacmi ve piyasa hızı hakkında kısa bir özet rapor ver.`;
+            } else if (mode === 'ANALYSIS') {
+                prompt = `${input} hissesi için kapsamlı bir temel ve teknik analiz yap. F/K oranları, bilanço durumu ve uzman görüşlerini dahil et.`;
+            } else if (mode === 'SENTIMENT') {
+                prompt = `Küresel piyasaların (ABD, Avrupa, Asya ve BIST) genel duyarlılık durumunu analiz et. Korku mu hakim yoksa açgözlülük mü? Nedenleri maddeler halinde yaz.`;
+            } else if (mode === 'SUGGESTION') {
+                prompt = `Şu kriterlere uygun bir hisse senedi öner: ${JSON.stringify(input)}. Neden bu hisseyi önerdiğini, potansiyelini ve risklerini detaylı anlat.`;
+            } else if (mode === 'PORTFOLIO') {
+                prompt = `Şu kriterlere göre sanal bir yatırım portföyü oluştur: ${JSON.stringify(input)}. Hangi hisselerden yüzde kaç alınmalı ve neden?`;
+            }
+
+            try {
+                const resultText = await callGeminiAPI(prompt);
+                
+                let htmlContent = markdownToHtml(resultText);
+                let cardHtml = '';
+
+                if (mode === 'RISK') {
+                    const scoreMatch = resultText.match(/Risk Puanı:\s*(\d+)/i);
+                    const statusMatch = resultText.match(/Risk Durumu:\s*(.*)/i);
+                    
+                    const score = scoreMatch ? scoreMatch[1] : "?";
+                    const status = statusMatch ? statusMatch[1].trim() : "Analiz Ediliyor";
+                    
+                    let riskClass = 'bg-gray-500';
+                    if (status.includes('Düşük')) riskClass = 'risk-low';
+                    else if (status.includes('Orta')) riskClass = 'risk-medium';
+                    else if (status.includes('Yüksek')) riskClass = 'risk-high';
+
+                    htmlContent = htmlContent
+                        .replace(/Risk Puanı:.*(<br>|\n)/i, '')
+                        .replace(/Risk Durumu:.*(<br>|\n)/i, '');
+
+                    cardHtml = `
+                        <div class="text-white p-6 rounded-xl shadow-lg mb-6 text-center ${riskClass}">
+                            <div class="flex flex-col md:flex-row justify-center items-center md:space-x-8 space-y-2 md:space-y-0">
+                                <div class="text-center">
+                                    <p class="text-xs font-bold opacity-80 uppercase tracking-wide">Risk Puanı</p>
+                                    <h2 class="text-6xl font-extrabold">${score}</h2>
+                                </div>
+                                <div class="hidden md:block h-16 w-0.5 bg-white opacity-30"></div>
+                                <div class="text-center">
+                                    <p class="text-xs font-bold opacity-80 uppercase tracking-wide">Risk Seviyesi</p>
+                                    <h2 class="text-3xl font-bold mt-1">${status}</h2>
+                                </div>
+                            </div>
+                            <p class="text-xs mt-4 opacity-80 border-t border-white/20 pt-2 inline-block">1 (En Düşük) - 10 (En Yüksek)</p>
+                        </div>
+                    `;
+                }
+
+                document.getElementById('analysis-output').innerHTML = `
+                    <div class="card-bg p-6 rounded-xl border border-gray-100 animate-fade-in">
+                        ${cardHtml}
+                        <div class="prose max-w-none text-gray-700 leading-relaxed">
+                            ${htmlContent}
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error(error);
+                document.getElementById('analysis-output').innerHTML = `
+                    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded">
+                        <p class="font-bold">Hata Oluştu</p>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            } finally {
+                document.getElementById('analysis-loading').classList.add('hidden');
+                loadIcons();
+            }
+        }
+
+        // Başlangıç
+        window.onload = () => {
+            renderStocks();
+            loadIcons();
+        };
+    </script>
 </body>
 </html>
+
 
